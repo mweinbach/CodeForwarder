@@ -6,12 +6,15 @@ use hyper::{Request, Response, StatusCode};
 use hyper_util::rt::TokioIo;
 use std::{
     sync::{Arc, OnceLock},
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::net::TcpListener;
 use tokio::sync::RwLock;
 
 use crate::types::VercelGatewayConfig;
+use crate::usage_tracker::{UsageEvent, UsageTracker};
+use chrono::Utc;
+use uuid::Uuid;
 
 const HARD_TOKEN_CAP: i64 = 32000;
 const MINIMUM_HEADROOM: i64 = 1024;
@@ -22,21 +25,53 @@ const INTERLEAVED_THINKING_BETA: &str = "interleaved-thinking-2025-05-14";
 const HTTP_CONNECT_TIMEOUT_SECS: u64 = 5;
 const HTTP_READ_TIMEOUT_SECS: u64 = 90;
 
+struct ForwardOutcome {
+    response: Response<Full<Bytes>>,
+    status_code: u16,
+    body: Bytes,
+}
+
+#[derive(Default)]
+struct TokenUsage {
+    input_tokens: Option<i64>,
+    output_tokens: Option<i64>,
+    total_tokens: Option<i64>,
+    cached_tokens: Option<i64>,
+    reasoning_tokens: Option<i64>,
+    usage_json: Option<String>,
+    account_hint: Option<String>,
+}
+
+#[derive(Clone)]
+struct TrackingSeed {
+    request_id: String,
+    started_at: Instant,
+    method: String,
+    path: String,
+    provider: String,
+    model: String,
+    account_key: String,
+    account_label: String,
+    request_bytes: i64,
+}
+
 pub struct ThinkingProxy {
     pub proxy_port: u16,
     pub target_port: u16,
     pub vercel_config: Arc<RwLock<VercelGatewayConfig>>,
+    pub usage_tracker: Arc<UsageTracker>,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
     serve_task: Option<tokio::task::JoinHandle<()>>,
     pub is_running: bool,
 }
 
 impl ThinkingProxy {
-    pub fn new(vercel_config: Arc<RwLock<VercelGatewayConfig>>) -> Self {
+    pub fn new(vercel_config: Arc<RwLock<VercelGatewayConfig>>, usage_tracker: Arc<UsageTracker>) -> Self {
         Self {
             proxy_port: 8317,
             target_port: 8318,
             vercel_config,
+            usage_tracker,
             shutdown_tx: None,
             serve_task: None,
             is_running: false,
@@ -58,6 +93,7 @@ impl ThinkingProxy {
         self.is_running = true;
 
         let vercel_config = self.vercel_config.clone();
+        let usage_tracker = self.usage_tracker.clone();
         let target_port = self.target_port;
 
         let serve_task = tokio::spawn(async move {
@@ -68,11 +104,13 @@ impl ThinkingProxy {
                             Ok((stream, _addr)) => {
                                 let io = TokioIo::new(stream);
                                 let vc = vercel_config.clone();
+                                let tracker = usage_tracker.clone();
                                 tokio::spawn(async move {
                                     let svc = service_fn(move |req| {
                                         let vc = vc.clone();
+                                        let tracker = tracker.clone();
                                         async move {
-                                            handle_request(req, vc, target_port).await
+                                            handle_request(req, vc, target_port, tracker).await
                                         }
                                     });
                                     if let Err(e) = http1::Builder::new()
@@ -162,7 +200,9 @@ async fn handle_request(
     req: Request<hyper::body::Incoming>,
     vercel_config: Arc<RwLock<VercelGatewayConfig>>,
     target_port: u16,
+    usage_tracker: Arc<UsageTracker>,
 ) -> Result<Response<Full<Bytes>>, hyper::Error> {
+    let request_started_at = Instant::now();
     let method = req.method().clone();
     let uri = req.uri().clone();
     let path = uri.path().to_string();
@@ -215,6 +255,7 @@ async fn handle_request(
     let is_provider_path = rewritten_path.starts_with("/api/provider/");
     let is_cli_proxy_path =
         rewritten_path.starts_with("/v1/") || rewritten_path.starts_with("/api/v1/");
+    let is_inference_request = is_provider_path || is_cli_proxy_path;
     if !is_provider_path && !is_cli_proxy_path {
         log::info!(
             "[ThinkingProxy] Amp management request, forwarding to ampcode.com: {}",
@@ -243,13 +284,26 @@ async fn handle_request(
         thinking_enabled = is_thinking;
     }
 
+    let tracking_seed = if is_inference_request {
+        Some(build_tracking_seed(
+            &method,
+            &rewritten_path,
+            &headers,
+            &modified_body,
+            body_bytes.len() as i64,
+            request_started_at,
+        ))
+    } else {
+        None
+    };
+
     // 5. Vercel gateway routing
     let vc = vercel_config.read().await;
     if vc.is_active() && method == hyper::Method::POST && is_claude_model_request(&modified_body) {
         let api_key = vc.api_key.clone();
         drop(vc);
         log::info!("[ThinkingProxy] Routing Claude request via Vercel AI Gateway");
-        return Ok(forward_to_vercel(
+        let result = forward_to_vercel(
             &method,
             "/v1/messages",
             &headers,
@@ -257,14 +311,27 @@ async fn handle_request(
             thinking_enabled,
             &api_key,
         )
-        .await
-        .unwrap_or_else(|e| {
-            log::error!("[ThinkingProxy] Vercel forward error: {}", e);
-            make_response(
-                StatusCode::BAD_GATEWAY,
-                "Bad Gateway - Could not connect to Vercel AI Gateway",
-            )
-        }));
+        .await;
+
+        return Ok(match result {
+            Ok(outcome) => {
+                record_usage_if_needed(
+                    usage_tracker.clone(),
+                    tracking_seed,
+                    outcome.status_code,
+                    outcome.body,
+                );
+                outcome.response
+            }
+            Err(e) => {
+                log::error!("[ThinkingProxy] Vercel forward error: {}", e);
+                record_usage_if_needed(usage_tracker.clone(), tracking_seed, 502, Bytes::new());
+                make_response(
+                    StatusCode::BAD_GATEWAY,
+                    "Bad Gateway - Could not connect to Vercel AI Gateway",
+                )
+            }
+        });
     }
     drop(vc);
 
@@ -280,9 +347,9 @@ async fn handle_request(
     .await;
 
     match result {
-        Ok(resp) => {
+        Ok(outcome) => {
             // If 404 and path doesn't start with /api/ or /v1/, retry with /api/ prefix
-            if resp.status() == StatusCode::NOT_FOUND
+            if outcome.status_code == StatusCode::NOT_FOUND.as_u16()
                 && !path.starts_with("/api/")
                 && !path.starts_with("/v1/")
             {
@@ -292,7 +359,7 @@ async fn handle_request(
                     path,
                     new_path
                 );
-                return Ok(forward_to_backend(
+                let retry_result = forward_to_backend(
                     &method,
                     &new_path,
                     &headers,
@@ -300,19 +367,384 @@ async fn handle_request(
                     thinking_enabled,
                     target_port,
                 )
-                .await
-                .unwrap_or_else(|e| {
-                    log::error!("[ThinkingProxy] Backend retry error: {}", e);
-                    make_response(StatusCode::BAD_GATEWAY, "Bad Gateway")
-                }));
+                .await;
+                return Ok(match retry_result {
+                    Ok(retry_outcome) => {
+                        record_usage_if_needed(
+                            usage_tracker.clone(),
+                            tracking_seed,
+                            retry_outcome.status_code,
+                            retry_outcome.body,
+                        );
+                        retry_outcome.response
+                    }
+                    Err(e) => {
+                        log::error!("[ThinkingProxy] Backend retry error: {}", e);
+                        record_usage_if_needed(usage_tracker.clone(), tracking_seed, 502, Bytes::new());
+                        make_response(StatusCode::BAD_GATEWAY, "Bad Gateway")
+                    }
+                });
             }
-            Ok(resp)
+            record_usage_if_needed(
+                usage_tracker.clone(),
+                tracking_seed,
+                outcome.status_code,
+                outcome.body,
+            );
+            Ok(outcome.response)
         }
         Err(e) => {
             log::error!("[ThinkingProxy] Backend forward error: {}", e);
+            record_usage_if_needed(usage_tracker, tracking_seed, 502, Bytes::new());
             Ok(make_response(StatusCode::BAD_GATEWAY, "Bad Gateway"))
         }
     }
+}
+
+fn build_tracking_seed(
+    method: &hyper::Method,
+    rewritten_path: &str,
+    headers: &hyper::HeaderMap,
+    body: &str,
+    request_bytes: i64,
+    started_at: Instant,
+) -> TrackingSeed {
+    let model = extract_model_from_body(body).unwrap_or_else(|| "unknown".to_string());
+    let provider = infer_provider_from_path_and_model(rewritten_path, &model);
+    let account_hint = extract_account_hint(headers, body);
+    let account_key = account_hint.unwrap_or_else(|| "unknown".to_string());
+
+    TrackingSeed {
+        request_id: Uuid::new_v4().to_string(),
+        started_at,
+        method: method.to_string(),
+        path: rewritten_path.to_string(),
+        provider,
+        model,
+        account_key: account_key.clone(),
+        account_label: account_key,
+        request_bytes,
+    }
+}
+
+fn record_usage_if_needed(
+    usage_tracker: Arc<UsageTracker>,
+    seed: Option<TrackingSeed>,
+    status_code: u16,
+    response_body: Bytes,
+) {
+    let Some(mut seed) = seed else {
+        return;
+    };
+
+    let mut usage = extract_token_usage(&response_body);
+    if seed.account_key == "unknown" {
+        if let Some(account_hint) = usage.account_hint.take() {
+            if !account_hint.trim().is_empty() {
+                seed.account_key = account_hint.clone();
+                seed.account_label = account_hint;
+            }
+        }
+    }
+
+    let event = UsageEvent {
+        request_id: seed.request_id,
+        timestamp_utc: Utc::now().timestamp(),
+        method: seed.method,
+        path: seed.path,
+        provider: seed.provider,
+        model: seed.model,
+        account_key: seed.account_key,
+        account_label: seed.account_label,
+        status_code: status_code as i64,
+        duration_ms: seed.started_at.elapsed().as_millis() as i64,
+        request_bytes: seed.request_bytes,
+        response_bytes: response_body.len() as i64,
+        input_tokens: usage.input_tokens,
+        output_tokens: usage.output_tokens,
+        total_tokens: usage.total_tokens,
+        cached_tokens: usage.cached_tokens,
+        reasoning_tokens: usage.reasoning_tokens,
+        usage_json: usage.usage_json,
+    };
+
+    tokio::spawn(async move {
+        if let Err(e) = usage_tracker.record_event(event).await {
+            log::warn!("[ThinkingProxy] Failed to persist usage event: {}", e);
+        }
+    });
+}
+
+fn extract_model_from_body(body: &str) -> Option<String> {
+    let json: serde_json::Value = serde_json::from_str(body).ok()?;
+    json.get("model")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
+fn infer_provider_from_path_and_model(path: &str, model: &str) -> String {
+    let path_parts: Vec<&str> = path.split('/').filter(|part| !part.is_empty()).collect();
+    if path_parts.len() >= 3 && path_parts[0] == "api" && path_parts[1] == "provider" {
+        return path_parts[2].to_string();
+    }
+
+    let model_lower = model.to_ascii_lowercase();
+    if model_lower.starts_with("claude-") {
+        return "claude".to_string();
+    }
+    if model_lower.starts_with("gemini-") {
+        return "gemini".to_string();
+    }
+    if model_lower.starts_with("qwen-") {
+        return "qwen".to_string();
+    }
+    if model_lower.starts_with("glm-") || model_lower.starts_with("zai-") {
+        return "zai".to_string();
+    }
+    if model_lower.starts_with("gpt-")
+        || model_lower.starts_with("o1")
+        || model_lower.starts_with("o3")
+        || model_lower.starts_with("o4")
+        || model_lower.starts_with("o5")
+    {
+        return "codex".to_string();
+    }
+    if model_lower.contains("copilot") {
+        return "github-copilot".to_string();
+    }
+    if model_lower.contains("antigravity") {
+        return "antigravity".to_string();
+    }
+    "unknown".to_string()
+}
+
+fn extract_account_hint(headers: &hyper::HeaderMap, body: &str) -> Option<String> {
+    let header_keys = [
+        "x-vibeproxy-account",
+        "x-vibeproxy-account-id",
+        "x-auth-account",
+        "x-auth-index",
+        "x-account-id",
+        "x-account-key",
+    ];
+    for header in header_keys {
+        if let Some(value) = headers.get(header).and_then(|v| v.to_str().ok()) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+
+    let json: serde_json::Value = serde_json::from_str(body).ok()?;
+    for key in ["auth_index", "account_id", "account", "account_key"] {
+        if let Some(value) = json.get(key) {
+            if let Some(s) = value.as_str() {
+                let trimmed = s.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            } else if value.is_number() {
+                return Some(value.to_string());
+            }
+        }
+    }
+
+    None
+}
+
+fn extract_token_usage(response_body: &[u8]) -> TokenUsage {
+    if response_body.is_empty() {
+        return TokenUsage::default();
+    }
+
+    if let Ok(json) = serde_json::from_slice::<serde_json::Value>(response_body) {
+        if let Some(usage) = extract_usage_from_json_value(&json) {
+            return usage;
+        }
+    }
+
+    let text = String::from_utf8_lossy(response_body);
+    let mut aggregate = TokenUsage::default();
+    let mut saw_usage = false;
+    for line in text.lines() {
+        let line = line.trim();
+        if !line.starts_with("data:") {
+            continue;
+        }
+        let payload = line.trim_start_matches("data:").trim();
+        if payload.is_empty() || payload == "[DONE]" {
+            continue;
+        }
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(payload) {
+            if let Some(parsed) = extract_usage_from_json_value(&json) {
+                saw_usage = true;
+                merge_usage(&mut aggregate, parsed);
+            }
+        }
+    }
+
+    if saw_usage {
+        aggregate
+    } else {
+        TokenUsage::default()
+    }
+}
+
+fn merge_usage(target: &mut TokenUsage, source: TokenUsage) {
+    target.input_tokens = sum_optional_i64(target.input_tokens, source.input_tokens);
+    target.output_tokens = sum_optional_i64(target.output_tokens, source.output_tokens);
+    target.cached_tokens = sum_optional_i64(target.cached_tokens, source.cached_tokens);
+    target.reasoning_tokens = sum_optional_i64(target.reasoning_tokens, source.reasoning_tokens);
+    target.total_tokens = sum_optional_i64(target.total_tokens, source.total_tokens);
+    if target.usage_json.is_none() {
+        target.usage_json = source.usage_json;
+    }
+    if target.account_hint.is_none() {
+        target.account_hint = source.account_hint;
+    }
+}
+
+fn sum_optional_i64(current: Option<i64>, incoming: Option<i64>) -> Option<i64> {
+    match (current, incoming) {
+        (Some(a), Some(b)) => Some(a + b),
+        (Some(a), None) => Some(a),
+        (None, Some(b)) => Some(b),
+        (None, None) => None,
+    }
+}
+
+fn extract_usage_from_json_value(value: &serde_json::Value) -> Option<TokenUsage> {
+    if let Some(obj) = value.as_object() {
+        if let Some(usage_value) = obj.get("usage") {
+            if let Some(parsed) = parse_usage_object(usage_value) {
+                return Some(parsed);
+            }
+        }
+
+        if let Some(parsed) = parse_usage_object(value) {
+            return Some(parsed);
+        }
+
+        for nested in obj.values() {
+            if let Some(parsed) = extract_usage_from_json_value(nested) {
+                return Some(parsed);
+            }
+        }
+    } else if let Some(arr) = value.as_array() {
+        for nested in arr {
+            if let Some(parsed) = extract_usage_from_json_value(nested) {
+                return Some(parsed);
+            }
+        }
+    }
+    None
+}
+
+fn parse_usage_object(value: &serde_json::Value) -> Option<TokenUsage> {
+    let obj = value.as_object()?;
+
+    let input_tokens = find_number_in_object(
+        obj,
+        &[
+            "input_tokens",
+            "prompt_tokens",
+            "promptTokenCount",
+            "inputTokenCount",
+        ],
+    );
+    let output_tokens = find_number_in_object(
+        obj,
+        &[
+            "output_tokens",
+            "completion_tokens",
+            "outputTokenCount",
+            "candidatesTokenCount",
+        ],
+    );
+    let total_tokens =
+        find_number_in_object(obj, &["total_tokens", "totalTokenCount", "tokens"]);
+    let cached_tokens = find_number_in_object(
+        obj,
+        &[
+            "cached_tokens",
+            "cached_input_tokens",
+            "cache_read_input_tokens",
+            "cache_creation_input_tokens",
+        ],
+    );
+    let reasoning_tokens = find_number_in_object(
+        obj,
+        &["reasoning_tokens", "thinking_tokens", "reasoningTokenCount"],
+    );
+    let account_hint = find_string_or_number_in_object(
+        obj,
+        &["auth_index", "account_index", "account_id", "account"],
+    );
+
+    if input_tokens.is_none()
+        && output_tokens.is_none()
+        && total_tokens.is_none()
+        && cached_tokens.is_none()
+        && reasoning_tokens.is_none()
+        && account_hint.is_none()
+    {
+        return None;
+    }
+
+    let total_tokens = total_tokens.or_else(|| match (input_tokens, output_tokens) {
+        (Some(input), Some(output)) => Some(input + output),
+        _ => None,
+    });
+
+    Some(TokenUsage {
+        input_tokens,
+        output_tokens,
+        total_tokens,
+        cached_tokens,
+        reasoning_tokens,
+        usage_json: serde_json::to_string(value).ok(),
+        account_hint,
+    })
+}
+
+fn find_number_in_object(obj: &serde_json::Map<String, serde_json::Value>, keys: &[&str]) -> Option<i64> {
+    for key in keys {
+        if let Some(value) = obj.get(*key) {
+            if let Some(parsed) = value.as_i64() {
+                return Some(parsed);
+            }
+            if let Some(parsed) = value.as_u64() {
+                return Some(parsed as i64);
+            }
+            if let Some(parsed) = value.as_f64() {
+                return Some(parsed.round() as i64);
+            }
+            if let Some(parsed) = value.as_str().and_then(|v| v.parse::<i64>().ok()) {
+                return Some(parsed);
+            }
+        }
+    }
+    None
+}
+
+fn find_string_or_number_in_object(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<String> {
+    for key in keys {
+        if let Some(value) = obj.get(*key) {
+            if let Some(parsed) = value.as_str() {
+                let trimmed = parsed.trim();
+                if !trimmed.is_empty() {
+                    return Some(trimmed.to_string());
+                }
+            } else if value.is_number() {
+                return Some(value.to_string());
+            }
+        }
+    }
+    None
 }
 
 fn is_claude_model_request(body: &str) -> bool {
@@ -601,7 +1033,7 @@ async fn forward_to_vercel(
     body: &str,
     thinking_enabled: bool,
     api_key: &str,
-) -> Result<Response<Full<Bytes>>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<ForwardOutcome, Box<dyn std::error::Error + Send + Sync>> {
     let client = shared_http_client();
     let url = format!("https://{}{}", VERCEL_GATEWAY_HOST, path);
 
@@ -673,7 +1105,11 @@ async fn forward_to_vercel(
     let resp_headers = resp.headers().clone();
     let resp_body = resp.bytes().await?;
 
-    Ok(build_proxy_response(status, &resp_headers, resp_body))
+    Ok(ForwardOutcome {
+        response: build_proxy_response(status, &resp_headers, resp_body.clone()),
+        status_code: status.as_u16(),
+        body: resp_body,
+    })
 }
 
 /// Forward a request to the local backend (CLIProxyAPI) on the target port.
@@ -684,7 +1120,7 @@ async fn forward_to_backend(
     body: &str,
     thinking_enabled: bool,
     target_port: u16,
-) -> Result<Response<Full<Bytes>>, Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<ForwardOutcome, Box<dyn std::error::Error + Send + Sync>> {
     let client = shared_http_client();
     let url = format!("http://127.0.0.1:{}{}", target_port, path);
 
@@ -742,7 +1178,11 @@ async fn forward_to_backend(
     let resp_headers = resp.headers().clone();
     let resp_body = resp.bytes().await?;
 
-    Ok(build_proxy_response(status, &resp_headers, resp_body))
+    Ok(ForwardOutcome {
+        response: build_proxy_response(status, &resp_headers, resp_body.clone()),
+        status_code: status.as_u16(),
+        body: resp_body,
+    })
 }
 
 #[cfg(test)]

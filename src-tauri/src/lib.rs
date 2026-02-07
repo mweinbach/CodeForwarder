@@ -2,12 +2,15 @@ mod auth_manager;
 mod binary_manager;
 mod commands;
 mod config_manager;
+mod managed_key;
 mod secure_store;
 mod server_manager;
 mod settings;
 mod thinking_proxy;
 mod tray;
 mod types;
+mod usage_native;
+mod usage_tracker;
 
 use commands::AppState;
 use server_manager::ServerManager;
@@ -18,6 +21,7 @@ use tauri_plugin_autostart::ManagerExt as AutoStartManagerExt;
 use thinking_proxy::ThinkingProxy;
 use tokio::sync::{Mutex, RwLock};
 use types::VercelGatewayConfig;
+use usage_tracker::UsageTracker;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -55,6 +59,7 @@ pub fn run() {
             commands::open_auth_folder,
             commands::copy_server_url,
             commands::sync_theme_icons,
+            commands::get_usage_dashboard,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -77,7 +82,17 @@ pub fn run() {
 
             // Create managers
             let server_manager = Arc::new(RwLock::new(ServerManager::new()));
-            let thinking_proxy = Arc::new(RwLock::new(ThinkingProxy::new(vercel_config)));
+            let usage_tracker = match UsageTracker::new() {
+                Ok(tracker) => Arc::new(tracker),
+                Err(e) => {
+                    log::error!("[Setup] Failed to initialize usage tracker: {}", e);
+                    return Err(Box::new(std::io::Error::other(e)));
+                }
+            };
+            let thinking_proxy = Arc::new(RwLock::new(ThinkingProxy::new(
+                vercel_config,
+                usage_tracker.clone(),
+            )));
             let lifecycle_lock = Arc::new(Mutex::new(()));
             let binary_downloading = Arc::new(AtomicBool::new(false));
 
@@ -87,6 +102,7 @@ pub fn run() {
                 thinking_proxy: thinking_proxy.clone(),
                 lifecycle_lock: lifecycle_lock.clone(),
                 binary_downloading: binary_downloading.clone(),
+                usage_tracker: usage_tracker.clone(),
             });
 
             // Setup system tray

@@ -12,7 +12,8 @@ It’s built with **Tauri 2 (Rust)** + **React 19 / Vite / TypeScript**, and bun
 - Manages provider accounts (OAuth tokens stored locally in `~/.cli-proxy-api/`)
 - Enables “thinking” requests for Claude models by interpreting model suffixes like `-thinking-5000`
 - Optional Claude routing via **Vercel AI Gateway** (API key stored encrypted)
-- System tray controls + “launch at login”
+- System tray controls + launch at login
+- Built-in local usage analytics dashboard (requests/tokens by provider/model/account)
 
 ## Prerequisites
 
@@ -62,6 +63,7 @@ Point your client/tooling at:
   - VibeProxy also writes `merged-config.yaml` here when providers are toggled or Z.AI keys are added.
 - Downloaded runtime binary: `%LOCALAPPDATA%\vibeproxy\cli-proxy-api-plus.exe`
 - App settings: stored via Tauri Store (`settings.json`), with the Vercel API key encrypted using Windows DPAPI.
+- Usage analytics DB: `~/.cli-proxy-api/vibeproxy-usage.db` (local-only)
 
 ## Updating the bundled runtime
 
@@ -83,3 +85,5 @@ To skip this step (CI/offline builds), set `SKIP_CLI_PROXY_SYNC=1`.
 - [Development](docs/DEVELOPMENT.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
+
+

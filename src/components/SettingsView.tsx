@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { 
   LayoutDashboard, 
   Cloud, 
+  PieChart,
   Settings as SettingsIcon, 
   FolderOpen,
   Power,
@@ -12,6 +13,7 @@ import {
 import { useServerState } from "../hooks/useServerState";
 import { useAuthAccounts } from "../hooks/useAuthAccounts";
 import { useSettings } from "../hooks/useSettings";
+import { useUsageDashboard } from "../hooks/useUsageDashboard";
 import type { ServiceType } from "../types";
 import { SERVICE_ORDER, PROVIDER_KEYS } from "../types";
 
@@ -21,6 +23,7 @@ import VercelGatewayControls from "./VercelGatewayControls";
 import QwenEmailDialog from "./QwenEmailDialog";
 import ZaiApiKeyDialog from "./ZaiApiKeyDialog";
 import TitleBar from "./TitleBar";
+import UsageDashboard from "./UsageDashboard";
 
 import glyphLight from "../assets/icons/light/glyph.png";
 import iconAntigravityLight from "../assets/icons/light/icon-antigravity.png";
@@ -110,7 +113,16 @@ export default function SettingsView() {
   const [showQwenDialog, setShowQwenDialog] = useState(false);
   const [showZaiDialog, setShowZaiDialog] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "services" | "settings">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "usage" | "services" | "settings">("dashboard");
+  const {
+    range: usageRange,
+    setRange: setUsageRange,
+    dashboard: usageDashboard,
+    isLoading: usageLoading,
+    lastError: usageError,
+    refresh: refreshUsage,
+    clearLastError: clearUsageError,
+  } = useUsageDashboard(activeTab === "usage");
   const operationalError = serverError ?? settingsError ?? accountsError;
 
   useEffect(() => {
@@ -227,6 +239,13 @@ export default function SettingsView() {
             Dashboard
           </button>
           <button
+            className={`sidebar-item ${activeTab === "usage" ? "active" : ""}`}
+            onClick={() => setActiveTab("usage")}
+          >
+            <PieChart className="sidebar-icon" />
+            Usage
+          </button>
+          <button
             className={`sidebar-item ${activeTab === "services" ? "active" : ""}`}
             onClick={() => setActiveTab("services")}
           >
@@ -312,6 +331,20 @@ export default function SettingsView() {
                 onDownloadBinary={downloadBinary}
               />
             </section>
+          </div>
+        )}
+
+        {activeTab === "usage" && (
+          <div className="tab-content animate-in">
+            <UsageDashboard
+              dashboard={usageDashboard}
+              range={usageRange}
+              onRangeChange={setUsageRange}
+              onRefresh={refreshUsage}
+              isLoading={usageLoading}
+              error={usageError}
+              onDismissError={clearUsageError}
+            />
           </div>
         )}
 
@@ -414,4 +447,3 @@ export default function SettingsView() {
     </div>
   );
 }
-

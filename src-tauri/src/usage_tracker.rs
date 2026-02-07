@@ -1,0 +1,687 @@
+use chrono::{TimeZone, Utc};
+use rusqlite::{params, Connection, OptionalExtension};
+use std::path::{Path, PathBuf};
+
+use crate::auth_manager;
+use crate::types::{
+    NativeUsagePanel, NativeUsageRow, NativeUsageSummary, UsageBreakdownRow, UsageSummary,
+    UsageTimeseriesPoint, VibeUsageDashboard,
+};
+
+#[derive(Debug, Clone, Copy)]
+pub enum UsageRangeQuery {
+    Last24Hours,
+    Last7Days,
+    Last30Days,
+    AllTime,
+}
+
+impl UsageRangeQuery {
+    pub fn from_input(input: &str) -> Self {
+        match input.to_ascii_lowercase().as_str() {
+            "24h" | "day" | "1d" => Self::Last24Hours,
+            "7d" | "week" => Self::Last7Days,
+            "30d" | "month" => Self::Last30Days,
+            "all" | "all-time" | "all_time" => Self::AllTime,
+            _ => Self::Last7Days,
+        }
+    }
+
+    pub fn as_key(&self) -> &'static str {
+        match self {
+            Self::Last24Hours => "24h",
+            Self::Last7Days => "7d",
+            Self::Last30Days => "30d",
+            Self::AllTime => "all",
+        }
+    }
+
+    fn start_timestamp(&self, now_ts: i64) -> Option<i64> {
+        match self {
+            Self::Last24Hours => Some(now_ts - 24 * 60 * 60),
+            Self::Last7Days => Some(now_ts - 7 * 24 * 60 * 60),
+            Self::Last30Days => Some(now_ts - 30 * 24 * 60 * 60),
+            Self::AllTime => None,
+        }
+    }
+
+    fn bucket_sql(&self) -> &'static str {
+        match self {
+            Self::Last24Hours => "strftime('%Y-%m-%d %H:00:00', timestamp_utc, 'unixepoch')",
+            Self::Last7Days | Self::Last30Days => {
+                "strftime('%Y-%m-%d', timestamp_utc, 'unixepoch')"
+            }
+            Self::AllTime => "strftime('%Y-%m', timestamp_utc, 'unixepoch')",
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct UsageEvent {
+    pub request_id: String,
+    pub timestamp_utc: i64,
+    pub method: String,
+    pub path: String,
+    pub provider: String,
+    pub model: String,
+    pub account_key: String,
+    pub account_label: String,
+    pub status_code: i64,
+    pub duration_ms: i64,
+    pub request_bytes: i64,
+    pub response_bytes: i64,
+    pub input_tokens: Option<i64>,
+    pub output_tokens: Option<i64>,
+    pub total_tokens: Option<i64>,
+    pub cached_tokens: Option<i64>,
+    pub reasoning_tokens: Option<i64>,
+    pub usage_json: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct NativeSnapshotRecord {
+    pub panel: NativeUsagePanel,
+    pub synced_ts: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UsageTracker {
+    db_path: PathBuf,
+}
+
+impl UsageTracker {
+    pub fn new() -> Result<Self, String> {
+        let db_path = auth_manager::get_auth_dir().join("vibeproxy-usage.db");
+        let tracker = Self { db_path };
+        tracker.init_schema()?;
+        Ok(tracker)
+    }
+
+    fn open_connection(path: &Path) -> Result<Connection, String> {
+        let conn = Connection::open(path)
+            .map_err(|e| format!("Failed to open usage database at {}: {}", path.display(), e))?;
+        conn.execute_batch(
+            r#"
+            PRAGMA journal_mode = WAL;
+            PRAGMA synchronous = NORMAL;
+            PRAGMA foreign_keys = ON;
+            "#,
+        )
+        .map_err(|e| format!("Failed to configure usage database: {}", e))?;
+        Ok(conn)
+    }
+
+    fn init_schema(&self) -> Result<(), String> {
+        let conn = Self::open_connection(&self.db_path)?;
+        conn.execute_batch(
+            r#"
+            CREATE TABLE IF NOT EXISTS usage_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              request_id TEXT NOT NULL,
+              timestamp_utc INTEGER NOT NULL,
+              day_utc TEXT NOT NULL,
+              method TEXT NOT NULL,
+              path TEXT NOT NULL,
+              provider TEXT NOT NULL,
+              model TEXT NOT NULL,
+              account_key TEXT NOT NULL,
+              account_label TEXT NOT NULL,
+              status_code INTEGER NOT NULL,
+              is_success INTEGER NOT NULL,
+              duration_ms INTEGER NOT NULL,
+              request_bytes INTEGER NOT NULL,
+              response_bytes INTEGER NOT NULL,
+              input_tokens INTEGER,
+              output_tokens INTEGER,
+              total_tokens INTEGER,
+              cached_tokens INTEGER,
+              reasoning_tokens INTEGER,
+              usage_json TEXT
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_usage_events_timestamp
+              ON usage_events(timestamp_utc);
+            CREATE INDEX IF NOT EXISTS idx_usage_events_provider_model
+              ON usage_events(provider, model);
+            CREATE INDEX IF NOT EXISTS idx_usage_events_account
+              ON usage_events(account_key);
+            CREATE INDEX IF NOT EXISTS idx_usage_events_day
+              ON usage_events(day_utc);
+
+            CREATE TABLE IF NOT EXISTS usage_rollups_daily (
+              day_utc TEXT NOT NULL,
+              provider TEXT NOT NULL,
+              model TEXT NOT NULL,
+              account_key TEXT NOT NULL,
+              requests INTEGER NOT NULL,
+              total_tokens INTEGER NOT NULL,
+              input_tokens INTEGER NOT NULL,
+              output_tokens INTEGER NOT NULL,
+              error_count INTEGER NOT NULL,
+              PRIMARY KEY (day_utc, provider, model, account_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS native_usage_snapshots (
+              range_key TEXT PRIMARY KEY,
+              effective_range TEXT NOT NULL,
+              status TEXT NOT NULL,
+              message TEXT,
+              synced_ts INTEGER,
+              total_requests INTEGER,
+              total_tokens INTEGER
+            );
+
+            CREATE TABLE IF NOT EXISTS native_usage_rows (
+              range_key TEXT NOT NULL,
+              row_index INTEGER NOT NULL,
+              source TEXT NOT NULL,
+              model TEXT NOT NULL,
+              auth_index TEXT,
+              requests INTEGER NOT NULL,
+              tokens INTEGER NOT NULL,
+              PRIMARY KEY (range_key, row_index),
+              FOREIGN KEY (range_key) REFERENCES native_usage_snapshots(range_key)
+                ON DELETE CASCADE
+            );
+            "#,
+        )
+        .map_err(|e| format!("Failed to initialize usage schema: {}", e))?;
+        Ok(())
+    }
+
+    pub async fn record_event(&self, event: UsageEvent) -> Result<(), String> {
+        let db_path = self.db_path.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = Self::open_connection(&db_path)?;
+            let tx = conn
+                .unchecked_transaction()
+                .map_err(|e| format!("Failed to start usage transaction: {}", e))?;
+
+            let day = Utc
+                .timestamp_opt(event.timestamp_utc, 0)
+                .single()
+                .unwrap_or_else(Utc::now)
+                .format("%Y-%m-%d")
+                .to_string();
+            let is_success = if (200..300).contains(&(event.status_code as u16)) {
+                1_i64
+            } else {
+                0_i64
+            };
+            let total_tokens = event
+                .total_tokens
+                .or_else(|| match (event.input_tokens, event.output_tokens) {
+                    (Some(input), Some(output)) => Some(input + output),
+                    _ => None,
+                });
+
+            tx.execute(
+                r#"
+                INSERT INTO usage_events (
+                  request_id, timestamp_utc, day_utc, method, path, provider, model,
+                  account_key, account_label, status_code, is_success, duration_ms,
+                  request_bytes, response_bytes, input_tokens, output_tokens,
+                  total_tokens, cached_tokens, reasoning_tokens, usage_json
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "#,
+                params![
+                    event.request_id,
+                    event.timestamp_utc,
+                    day,
+                    event.method,
+                    event.path,
+                    event.provider,
+                    event.model,
+                    event.account_key,
+                    event.account_label,
+                    event.status_code,
+                    is_success,
+                    event.duration_ms,
+                    event.request_bytes,
+                    event.response_bytes,
+                    event.input_tokens,
+                    event.output_tokens,
+                    total_tokens,
+                    event.cached_tokens,
+                    event.reasoning_tokens,
+                    event.usage_json,
+                ],
+            )
+            .map_err(|e| format!("Failed to insert usage event: {}", e))?;
+
+            let error_count = if is_success == 1 { 0_i64 } else { 1_i64 };
+            tx.execute(
+                r#"
+                INSERT INTO usage_rollups_daily (
+                  day_utc, provider, model, account_key, requests, total_tokens,
+                  input_tokens, output_tokens, error_count
+                ) VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?)
+                ON CONFLICT(day_utc, provider, model, account_key)
+                DO UPDATE SET
+                  requests = usage_rollups_daily.requests + 1,
+                  total_tokens = usage_rollups_daily.total_tokens + excluded.total_tokens,
+                  input_tokens = usage_rollups_daily.input_tokens + excluded.input_tokens,
+                  output_tokens = usage_rollups_daily.output_tokens + excluded.output_tokens,
+                  error_count = usage_rollups_daily.error_count + excluded.error_count
+                "#,
+                params![
+                    day,
+                    event.provider,
+                    event.model,
+                    event.account_key,
+                    total_tokens.unwrap_or(0),
+                    event.input_tokens.unwrap_or(0),
+                    event.output_tokens.unwrap_or(0),
+                    error_count,
+                ],
+            )
+            .map_err(|e| format!("Failed to upsert daily usage rollup: {}", e))?;
+
+            tx.commit()
+                .map_err(|e| format!("Failed to commit usage transaction: {}", e))?;
+            Ok(())
+        })
+        .await
+        .map_err(|e| format!("Failed to join usage write task: {}", e))?
+    }
+
+    pub async fn get_vibe_dashboard(&self, range: UsageRangeQuery) -> Result<VibeUsageDashboard, String> {
+        let db_path = self.db_path.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = Self::open_connection(&db_path)?;
+            let now_ts = Utc::now().timestamp();
+            let start_ts = range.start_timestamp(now_ts);
+
+            let summary = if let Some(start) = start_ts {
+                let mut stmt = conn
+                    .prepare(
+                        r#"
+                        SELECT
+                          COUNT(*),
+                          COALESCE(SUM(COALESCE(total_tokens, 0)), 0),
+                          COALESCE(SUM(COALESCE(input_tokens, 0)), 0),
+                          COALESCE(SUM(COALESCE(output_tokens, 0)), 0),
+                          COALESCE(SUM(CASE WHEN is_success = 0 THEN 1 ELSE 0 END), 0)
+                        FROM usage_events
+                        WHERE timestamp_utc >= ?
+                        "#,
+                    )
+                    .map_err(|e| format!("Failed to prepare usage summary query: {}", e))?;
+                stmt.query_row(params![start], |row| {
+                    Ok(UsageSummary {
+                        total_requests: row.get::<_, i64>(0)?,
+                        total_tokens: row.get::<_, i64>(1)?,
+                        input_tokens: row.get::<_, i64>(2)?,
+                        output_tokens: row.get::<_, i64>(3)?,
+                        error_count: row.get::<_, i64>(4)?,
+                        error_rate: 0.0,
+                    })
+                })
+                .map_err(|e| format!("Failed to execute usage summary query: {}", e))?
+            } else {
+                let mut stmt = conn
+                    .prepare(
+                        r#"
+                        SELECT
+                          COUNT(*),
+                          COALESCE(SUM(COALESCE(total_tokens, 0)), 0),
+                          COALESCE(SUM(COALESCE(input_tokens, 0)), 0),
+                          COALESCE(SUM(COALESCE(output_tokens, 0)), 0),
+                          COALESCE(SUM(CASE WHEN is_success = 0 THEN 1 ELSE 0 END), 0)
+                        FROM usage_events
+                        "#,
+                    )
+                    .map_err(|e| format!("Failed to prepare usage summary query: {}", e))?;
+                stmt.query_row([], |row| {
+                    Ok(UsageSummary {
+                        total_requests: row.get::<_, i64>(0)?,
+                        total_tokens: row.get::<_, i64>(1)?,
+                        input_tokens: row.get::<_, i64>(2)?,
+                        output_tokens: row.get::<_, i64>(3)?,
+                        error_count: row.get::<_, i64>(4)?,
+                        error_rate: 0.0,
+                    })
+                })
+                .map_err(|e| format!("Failed to execute usage summary query: {}", e))?
+            };
+
+            let mut summary = summary;
+            if summary.total_requests > 0 {
+                summary.error_rate =
+                    (summary.error_count as f64 / summary.total_requests as f64) * 100.0;
+            }
+
+            let bucket = range.bucket_sql();
+            let timeseries_sql = if start_ts.is_some() {
+                format!(
+                    r#"
+                    SELECT
+                      {bucket} AS bucket,
+                      COUNT(*) AS requests,
+                      COALESCE(SUM(COALESCE(total_tokens, 0)), 0) AS total_tokens,
+                      COALESCE(SUM(COALESCE(input_tokens, 0)), 0) AS input_tokens,
+                      COALESCE(SUM(COALESCE(output_tokens, 0)), 0) AS output_tokens,
+                      COALESCE(SUM(CASE WHEN is_success = 0 THEN 1 ELSE 0 END), 0) AS error_count
+                    FROM usage_events
+                    WHERE timestamp_utc >= ?
+                    GROUP BY bucket
+                    ORDER BY bucket ASC
+                    "#
+                )
+            } else {
+                format!(
+                    r#"
+                    SELECT
+                      {bucket} AS bucket,
+                      COUNT(*) AS requests,
+                      COALESCE(SUM(COALESCE(total_tokens, 0)), 0) AS total_tokens,
+                      COALESCE(SUM(COALESCE(input_tokens, 0)), 0) AS input_tokens,
+                      COALESCE(SUM(COALESCE(output_tokens, 0)), 0) AS output_tokens,
+                      COALESCE(SUM(CASE WHEN is_success = 0 THEN 1 ELSE 0 END), 0) AS error_count
+                    FROM usage_events
+                    GROUP BY bucket
+                    ORDER BY bucket ASC
+                    "#
+                )
+            };
+
+            let mut stmt = conn
+                .prepare(&timeseries_sql)
+                .map_err(|e| format!("Failed to prepare timeseries query: {}", e))?;
+            let mut rows = if let Some(start) = start_ts {
+                stmt.query(params![start])
+                    .map_err(|e| format!("Failed to query usage timeseries: {}", e))?
+            } else {
+                stmt.query([])
+                    .map_err(|e| format!("Failed to query usage timeseries: {}", e))?
+            };
+
+            let mut timeseries: Vec<UsageTimeseriesPoint> = Vec::new();
+            while let Some(row) = rows
+                .next()
+                .map_err(|e| format!("Failed to iterate usage timeseries rows: {}", e))?
+            {
+                timeseries.push(UsageTimeseriesPoint {
+                    bucket: row.get::<_, String>(0).unwrap_or_else(|_| "".to_string()),
+                    requests: row.get::<_, i64>(1).unwrap_or(0),
+                    total_tokens: row.get::<_, i64>(2).unwrap_or(0),
+                    input_tokens: row.get::<_, i64>(3).unwrap_or(0),
+                    output_tokens: row.get::<_, i64>(4).unwrap_or(0),
+                    error_count: row.get::<_, i64>(5).unwrap_or(0),
+                });
+            }
+
+            let breakdown_sql = if start_ts.is_some() {
+                r#"
+                SELECT
+                  provider,
+                  model,
+                  account_key,
+                  account_label,
+                  COUNT(*) AS requests,
+                  COALESCE(SUM(COALESCE(total_tokens, 0)), 0) AS total_tokens,
+                  COALESCE(SUM(COALESCE(input_tokens, 0)), 0) AS input_tokens,
+                  COALESCE(SUM(COALESCE(output_tokens, 0)), 0) AS output_tokens,
+                  COALESCE(SUM(CASE WHEN is_success = 0 THEN 1 ELSE 0 END), 0) AS error_count,
+                  MAX(timestamp_utc) AS last_seen
+                FROM usage_events
+                WHERE timestamp_utc >= ?
+                GROUP BY provider, model, account_key, account_label
+                ORDER BY total_tokens DESC, requests DESC
+                LIMIT 200
+                "#
+            } else {
+                r#"
+                SELECT
+                  provider,
+                  model,
+                  account_key,
+                  account_label,
+                  COUNT(*) AS requests,
+                  COALESCE(SUM(COALESCE(total_tokens, 0)), 0) AS total_tokens,
+                  COALESCE(SUM(COALESCE(input_tokens, 0)), 0) AS input_tokens,
+                  COALESCE(SUM(COALESCE(output_tokens, 0)), 0) AS output_tokens,
+                  COALESCE(SUM(CASE WHEN is_success = 0 THEN 1 ELSE 0 END), 0) AS error_count,
+                  MAX(timestamp_utc) AS last_seen
+                FROM usage_events
+                GROUP BY provider, model, account_key, account_label
+                ORDER BY total_tokens DESC, requests DESC
+                LIMIT 200
+                "#
+            };
+
+            let mut stmt = conn
+                .prepare(breakdown_sql)
+                .map_err(|e| format!("Failed to prepare breakdown query: {}", e))?;
+            let mut rows = if let Some(start) = start_ts {
+                stmt.query(params![start])
+                    .map_err(|e| format!("Failed to query usage breakdown: {}", e))?
+            } else {
+                stmt.query([])
+                    .map_err(|e| format!("Failed to query usage breakdown: {}", e))?
+            };
+
+            let mut breakdown = Vec::new();
+            while let Some(row) = rows
+                .next()
+                .map_err(|e| format!("Failed to iterate usage breakdown rows: {}", e))?
+            {
+                let last_seen_ts: i64 = row.get::<_, i64>(9).unwrap_or(0);
+                let last_seen = if last_seen_ts > 0 {
+                    Utc.timestamp_opt(last_seen_ts, 0)
+                        .single()
+                        .map(|dt| dt.to_rfc3339())
+                } else {
+                    None
+                };
+                breakdown.push(UsageBreakdownRow {
+                    provider: row.get::<_, String>(0).unwrap_or_else(|_| "unknown".to_string()),
+                    model: row.get::<_, String>(1).unwrap_or_else(|_| "unknown".to_string()),
+                    account_key: row.get::<_, String>(2).unwrap_or_else(|_| "unknown".to_string()),
+                    account_label: row.get::<_, String>(3).unwrap_or_else(|_| "unknown".to_string()),
+                    requests: row.get::<_, i64>(4).unwrap_or(0),
+                    total_tokens: row.get::<_, i64>(5).unwrap_or(0),
+                    input_tokens: row.get::<_, i64>(6).unwrap_or(0),
+                    output_tokens: row.get::<_, i64>(7).unwrap_or(0),
+                    error_count: row.get::<_, i64>(8).unwrap_or(0),
+                    last_seen,
+                });
+            }
+
+            Ok(VibeUsageDashboard {
+                range: range.as_key().to_string(),
+                summary,
+                timeseries,
+                breakdown,
+            })
+        })
+        .await
+        .map_err(|e| format!("Failed to join usage dashboard query task: {}", e))?
+    }
+
+    pub async fn save_native_snapshot(
+        &self,
+        range_key: &str,
+        panel: &NativeUsagePanel,
+    ) -> Result<(), String> {
+        let db_path = self.db_path.clone();
+        let range_key = range_key.to_string();
+        let panel = panel.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn = Self::open_connection(&db_path)?;
+            let tx = conn
+                .unchecked_transaction()
+                .map_err(|e| format!("Failed to start native snapshot transaction: {}", e))?;
+
+            let (summary_requests, summary_tokens) = match panel.summary.as_ref() {
+                Some(summary) => (Some(summary.total_requests), Some(summary.total_tokens)),
+                None => (None, None),
+            };
+            let synced_ts = panel
+                .last_synced_at
+                .as_ref()
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .map(|dt| dt.timestamp());
+
+            tx.execute(
+                r#"
+                INSERT INTO native_usage_snapshots (
+                  range_key, effective_range, status, message, synced_ts, total_requests, total_tokens
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(range_key)
+                DO UPDATE SET
+                  effective_range = excluded.effective_range,
+                  status = excluded.status,
+                  message = excluded.message,
+                  synced_ts = excluded.synced_ts,
+                  total_requests = excluded.total_requests,
+                  total_tokens = excluded.total_tokens
+                "#,
+                params![
+                    range_key,
+                    panel.effective_range,
+                    panel.status,
+                    panel.message,
+                    synced_ts,
+                    summary_requests,
+                    summary_tokens,
+                ],
+            )
+            .map_err(|e| format!("Failed to upsert native snapshot summary: {}", e))?;
+
+            tx.execute(
+                "DELETE FROM native_usage_rows WHERE range_key = ?",
+                params![range_key],
+            )
+            .map_err(|e| format!("Failed to clear native snapshot rows: {}", e))?;
+
+            for (idx, row) in panel.rows.iter().enumerate() {
+                tx.execute(
+                    r#"
+                    INSERT INTO native_usage_rows (
+                      range_key, row_index, source, model, auth_index, requests, tokens
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    "#,
+                    params![
+                        range_key,
+                        idx as i64,
+                        row.source,
+                        row.model,
+                        row.auth_index,
+                        row.requests,
+                        row.tokens,
+                    ],
+                )
+                .map_err(|e| format!("Failed to insert native snapshot row: {}", e))?;
+            }
+
+            tx.commit()
+                .map_err(|e| format!("Failed to commit native snapshot transaction: {}", e))?;
+            Ok(())
+        })
+        .await
+        .map_err(|e| format!("Failed to join native snapshot write task: {}", e))?
+    }
+
+    pub async fn load_native_snapshot(
+        &self,
+        range_key: &str,
+    ) -> Result<Option<NativeSnapshotRecord>, String> {
+        let db_path = self.db_path.clone();
+        let range_key = range_key.to_string();
+        tokio::task::spawn_blocking(move || {
+            let conn = Self::open_connection(&db_path)?;
+            let mut stmt = conn
+                .prepare(
+                    r#"
+                    SELECT
+                      effective_range,
+                      status,
+                      message,
+                      synced_ts,
+                      total_requests,
+                      total_tokens
+                    FROM native_usage_snapshots
+                    WHERE range_key = ?
+                    "#,
+                )
+                .map_err(|e| format!("Failed to prepare native snapshot query: {}", e))?;
+
+            let summary_row: Option<(String, String, Option<String>, Option<i64>, Option<i64>, Option<i64>)> = stmt
+                .query_row(params![range_key], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, Option<i64>>(3)?,
+                        row.get::<_, Option<i64>>(4)?,
+                        row.get::<_, Option<i64>>(5)?,
+                    ))
+                })
+                .optional()
+                .map_err(|e| format!("Failed to execute native snapshot query: {}", e))?;
+
+            let Some((effective_range, status, message, synced_ts, total_requests, total_tokens)) =
+                summary_row
+            else {
+                return Ok(None);
+            };
+
+            let mut rows_stmt = conn
+                .prepare(
+                    r#"
+                    SELECT source, model, auth_index, requests, tokens
+                    FROM native_usage_rows
+                    WHERE range_key = ?
+                    ORDER BY row_index ASC
+                    "#,
+                )
+                .map_err(|e| format!("Failed to prepare native rows query: {}", e))?;
+
+            let rows_iter = rows_stmt
+                .query_map(params![range_key], |row| {
+                    Ok(NativeUsageRow {
+                        source: row.get::<_, String>(0)?,
+                        model: row.get::<_, String>(1)?,
+                        auth_index: row.get::<_, Option<String>>(2)?,
+                        requests: row.get::<_, i64>(3)?,
+                        tokens: row.get::<_, i64>(4)?,
+                    })
+                })
+                .map_err(|e| format!("Failed to query native snapshot rows: {}", e))?;
+
+            let mut rows = Vec::new();
+            for row in rows_iter {
+                rows.push(row.map_err(|e| format!("Failed to read native snapshot row: {}", e))?);
+            }
+
+            let last_synced_at = synced_ts.and_then(|ts| {
+                Utc.timestamp_opt(ts, 0)
+                    .single()
+                    .map(|dt| dt.to_rfc3339())
+            });
+            let summary = match (total_requests, total_tokens) {
+                (Some(requests), Some(tokens)) => Some(NativeUsageSummary {
+                    total_requests: requests,
+                    total_tokens: tokens,
+                }),
+                _ => None,
+            };
+
+            Ok(Some(NativeSnapshotRecord {
+                panel: NativeUsagePanel {
+                    status,
+                    effective_range,
+                    message,
+                    summary,
+                    rows,
+                    last_synced_at,
+                },
+                synced_ts,
+            }))
+        })
+        .await
+        .map_err(|e| format!("Failed to join native snapshot read task: {}", e))?
+    }
+}

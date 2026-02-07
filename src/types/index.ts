@@ -51,6 +51,73 @@ export interface BinaryDownloadProgress {
   total_bytes: number;
 }
 
+export type UsageRange = "24h" | "7d" | "30d" | "all";
+
+export interface UsageSummary {
+  total_requests: number;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  error_count: number;
+  error_rate: number;
+}
+
+export interface UsageTimeseriesPoint {
+  bucket: string;
+  requests: number;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  error_count: number;
+}
+
+export interface UsageBreakdownRow {
+  provider: string;
+  model: string;
+  account_key: string;
+  account_label: string;
+  requests: number;
+  total_tokens: number;
+  input_tokens: number;
+  output_tokens: number;
+  error_count: number;
+  last_seen: string | null;
+}
+
+export interface VibeUsageDashboard {
+  range: UsageRange;
+  summary: UsageSummary;
+  timeseries: UsageTimeseriesPoint[];
+  breakdown: UsageBreakdownRow[];
+}
+
+export interface NativeUsageSummary {
+  total_requests: number;
+  total_tokens: number;
+}
+
+export interface NativeUsageRow {
+  source: string;
+  model: string;
+  auth_index: string | null;
+  requests: number;
+  tokens: number;
+}
+
+export interface NativeUsagePanel {
+  status: "ok" | "unavailable" | "stale" | string;
+  effective_range: string;
+  message: string | null;
+  summary: NativeUsageSummary | null;
+  rows: NativeUsageRow[];
+  last_synced_at: string | null;
+}
+
+export interface UsageDashboardPayload {
+  vibe: VibeUsageDashboard;
+  native: NativeUsagePanel;
+}
+
 export const SERVICE_DISPLAY_NAMES: Record<ServiceType, string> = {
   claude: "Claude Code",
   codex: "Codex",

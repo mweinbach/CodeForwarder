@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::auth_manager;
+use crate::managed_key;
 
 pub fn get_base_config_path(app_handle: &tauri::AppHandle) -> Result<PathBuf, String> {
     use tauri::Manager;
@@ -92,11 +93,6 @@ pub fn get_merged_config_path(
         .map(|(key, _)| key.clone())
         .collect();
 
-    // If no Z.AI keys and no disabled providers, return the base config path
-    if zai_keys.is_empty() && disabled_providers.is_empty() {
-        return Ok(base_config_path);
-    }
-
     // Read and parse the base config.
     let base_config = fs::read_to_string(&base_config_path)
         .map_err(|e| format!("Failed to read base config: {}", e))?;
@@ -105,6 +101,32 @@ pub fn get_merged_config_path(
     let root_map = root
         .as_mapping_mut()
         .ok_or_else(|| "Base config root must be a YAML mapping".to_string())?;
+
+    // Inject managed local-only management key.
+    let management_key = managed_key::get_or_create_management_key()
+        .map_err(|e| format!("Failed to load managed remote-management key: {}", e))?;
+    let rm_section_key = serde_yaml::Value::String("remote-management".to_string());
+    if !matches!(
+        root_map.get(&rm_section_key),
+        Some(serde_yaml::Value::Mapping(_))
+    ) {
+        root_map.insert(
+            rm_section_key.clone(),
+            serde_yaml::Value::Mapping(Default::default()),
+        );
+    }
+    let rm_section = root_map
+        .get_mut(&rm_section_key)
+        .and_then(|v| v.as_mapping_mut())
+        .ok_or_else(|| "remote-management must be a YAML mapping".to_string())?;
+    rm_section.insert(
+        serde_yaml::Value::String("allow-remote".to_string()),
+        serde_yaml::Value::Bool(false),
+    );
+    rm_section.insert(
+        serde_yaml::Value::String("secret-key".to_string()),
+        serde_yaml::Value::String(management_key),
+    );
 
     // Apply oauth-excluded-models section for disabled providers.
     if !disabled_providers.is_empty() {

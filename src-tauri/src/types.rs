@@ -157,3 +157,76 @@ pub struct BinaryDownloadProgress {
     pub bytes_downloaded: u64,
     pub total_bytes: u64,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct UsageSummary {
+    pub total_requests: i64,
+    pub total_tokens: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub error_count: i64,
+    pub error_rate: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageTimeseriesPoint {
+    pub bucket: String,
+    pub requests: i64,
+    pub total_tokens: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub error_count: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageBreakdownRow {
+    pub provider: String,
+    pub model: String,
+    pub account_key: String,
+    pub account_label: String,
+    pub requests: i64,
+    pub total_tokens: i64,
+    pub input_tokens: i64,
+    pub output_tokens: i64,
+    pub error_count: i64,
+    pub last_seen: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VibeUsageDashboard {
+    pub range: String,
+    pub summary: UsageSummary,
+    pub timeseries: Vec<UsageTimeseriesPoint>,
+    pub breakdown: Vec<UsageBreakdownRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct NativeUsageSummary {
+    pub total_requests: i64,
+    pub total_tokens: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NativeUsageRow {
+    pub source: String,
+    pub model: String,
+    pub auth_index: Option<String>,
+    pub requests: i64,
+    pub tokens: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NativeUsagePanel {
+    pub status: String,
+    pub effective_range: String,
+    pub message: Option<String>,
+    pub summary: Option<NativeUsageSummary>,
+    pub rows: Vec<NativeUsageRow>,
+    pub last_synced_at: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UsageDashboardPayload {
+    pub vibe: VibeUsageDashboard,
+    pub native: NativeUsagePanel,
+}
