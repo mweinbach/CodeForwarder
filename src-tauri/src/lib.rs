@@ -136,6 +136,22 @@ pub fn run() {
                                 };
                             let binary_path_str = binary_path.to_string_lossy().to_string();
 
+                            {
+                                let mut tp = tp.write().await;
+                                tp.stop().await;
+                            }
+                            {
+                                let mut sm = sm.write().await;
+                                sm.stop().await;
+                            }
+                            ServerManager::kill_orphaned_processes().await;
+                            if let Err(e) =
+                                ServerManager::cleanup_port_conflicts_for_restart().await
+                            {
+                                log::error!("[Setup] Failed to clear stale listeners: {}", e);
+                                return;
+                            }
+
                             // Start thinking proxy
                             {
                                 let mut tp = tp.write().await;
@@ -243,6 +259,22 @@ pub fn run() {
                                         }
                                     };
                                 let bin_str = binary_path.to_string_lossy().to_string();
+
+                                {
+                                    let mut tp = tp.write().await;
+                                    tp.stop().await;
+                                }
+                                {
+                                    let mut sm = sm.write().await;
+                                    sm.stop().await;
+                                }
+                                ServerManager::kill_orphaned_processes().await;
+                                if let Err(e) =
+                                    ServerManager::cleanup_port_conflicts_for_restart().await
+                                {
+                                    log::error!("Failed to clear stale listeners: {}", e);
+                                    return;
+                                }
 
                                 {
                                     let mut tp = tp.write().await;

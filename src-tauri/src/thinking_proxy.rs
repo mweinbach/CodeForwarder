@@ -27,6 +27,7 @@ pub struct ThinkingProxy {
     pub target_port: u16,
     pub vercel_config: Arc<RwLock<VercelGatewayConfig>>,
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
+    serve_task: Option<tokio::task::JoinHandle<()>>,
     pub is_running: bool,
 }
 
@@ -37,6 +38,7 @@ impl ThinkingProxy {
             target_port: 8318,
             vercel_config,
             shutdown_tx: None,
+            serve_task: None,
             is_running: false,
         }
     }
@@ -58,7 +60,7 @@ impl ThinkingProxy {
         let vercel_config = self.vercel_config.clone();
         let target_port = self.target_port;
 
-        tokio::spawn(async move {
+        let serve_task = tokio::spawn(async move {
             loop {
                 tokio::select! {
                     result = listener.accept() => {
@@ -93,6 +95,7 @@ impl ThinkingProxy {
                 }
             }
         });
+        self.serve_task = Some(serve_task);
 
         Ok(())
     }
@@ -100,6 +103,17 @@ impl ThinkingProxy {
     pub async fn stop(&mut self) {
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(());
+        }
+        if let Some(handle) = self.serve_task.take() {
+            match tokio::time::timeout(Duration::from_secs(2), handle).await {
+                Ok(Ok(())) => {}
+                Ok(Err(e)) => {
+                    log::warn!("[ThinkingProxy] Proxy task join error: {}", e);
+                }
+                Err(_) => {
+                    log::warn!("[ThinkingProxy] Timed out waiting for proxy task to stop");
+                }
+            }
         }
         self.is_running = false;
         log::info!("[ThinkingProxy] Stopped");

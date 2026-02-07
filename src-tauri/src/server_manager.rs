@@ -1,6 +1,7 @@
 use crate::types::AuthCommand;
 use chrono::Utc;
 use log;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -10,6 +11,8 @@ use uuid::Uuid;
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+const PROXY_PORT: u16 = 8317;
+const BACKEND_PORT: u16 = 8318;
 
 fn apply_hidden_process_flags(cmd: &mut Command) {
     #[cfg(target_os = "windows")]
@@ -507,6 +510,58 @@ impl ServerManager {
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
     }
 
+    pub async fn cleanup_port_conflicts_for_restart() -> Result<(), String> {
+        let listeners = list_tcp_listeners().await?;
+        if listeners.is_empty() {
+            return Ok(());
+        }
+
+        let current_pid = std::process::id();
+        let mut pid_to_ports: HashMap<u32, Vec<u16>> = HashMap::new();
+        for (port, pid) in listeners {
+            if (port == PROXY_PORT || port == BACKEND_PORT) && pid != current_pid {
+                pid_to_ports.entry(pid).or_default().push(port);
+            }
+        }
+
+        if pid_to_ports.is_empty() {
+            return Ok(());
+        }
+
+        for (pid, ports) in pid_to_ports {
+            let Some(image_name) = tasklist_image_name_for_pid(pid).await else {
+                return Err(format!(
+                    "Ports {:?} are in use by PID {} but process lookup failed",
+                    ports, pid
+                ));
+            };
+
+            if !is_vibeproxy_managed_process(&image_name) {
+                return Err(format!(
+                    "Ports {:?} are in use by {} (PID {}). Close that process and try again.",
+                    ports, image_name, pid
+                ));
+            }
+
+            log::warn!(
+                "[ServerManager] Killing stale {} process PID={} on ports {:?}",
+                image_name,
+                pid,
+                ports
+            );
+
+            let mut taskkill = Command::new("taskkill");
+            apply_hidden_process_flags(&mut taskkill);
+            let _ = taskkill
+                .args(["/F", "/T", "/PID", &pid.to_string()])
+                .output()
+                .await;
+        }
+
+        tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+        Ok(())
+    }
+
     // -- Z.AI key persistence -----------------------------------------------
 
     pub fn save_zai_api_key(api_key: &str) -> Result<(bool, String), String> {
@@ -550,6 +605,88 @@ impl ServerManager {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+async fn list_tcp_listeners() -> Result<Vec<(u16, u32)>, String> {
+    let mut netstat = Command::new("netstat");
+    apply_hidden_process_flags(&mut netstat);
+    let output = netstat
+        .args(["-ano", "-p", "TCP"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run netstat: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!("netstat failed with status {}", output.status));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut listeners = Vec::new();
+    for line in stdout.lines() {
+        let cols: Vec<&str> = line.split_whitespace().collect();
+        if cols.len() < 5 {
+            continue;
+        }
+        if !cols[0].eq_ignore_ascii_case("TCP") || !cols[3].eq_ignore_ascii_case("LISTENING") {
+            continue;
+        }
+
+        let Some(port) = parse_local_port(cols[1]) else {
+            continue;
+        };
+        let Ok(pid) = cols[4].parse::<u32>() else {
+            continue;
+        };
+        listeners.push((port, pid));
+    }
+
+    Ok(listeners)
+}
+
+fn parse_local_port(local_addr: &str) -> Option<u16> {
+    local_addr.rsplit(':').next()?.parse::<u16>().ok()
+}
+
+async fn tasklist_image_name_for_pid(pid: u32) -> Option<String> {
+    let mut tasklist = Command::new("tasklist");
+    apply_hidden_process_flags(&mut tasklist);
+    let pid_filter = format!("PID eq {}", pid);
+    let output = tasklist
+        .args(["/FI", &pid_filter, "/FO", "CSV", "/NH"])
+        .output()
+        .await
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let line = stdout.lines().map(str::trim).find(|l| !l.is_empty())?;
+
+    if line.starts_with("INFO:") {
+        return None;
+    }
+
+    parse_tasklist_csv_image_name(line)
+}
+
+fn parse_tasklist_csv_image_name(line: &str) -> Option<String> {
+    let trimmed = line.trim();
+    if let Some(rest) = trimmed.strip_prefix('"') {
+        let end = rest.find('"')?;
+        return Some(rest[..end].to_string());
+    }
+
+    trimmed
+        .split(',')
+        .next()
+        .map(|part| part.trim().to_string())
+}
+
+fn is_vibeproxy_managed_process(image_name: &str) -> bool {
+    let lower = image_name.to_ascii_lowercase();
+    lower.contains("vibeproxy") || lower.contains("cli-proxy-api")
+}
 
 /// Extract the device code from Copilot CLI output.
 /// Looks for patterns like "enter the code: XXXX-XXXX".

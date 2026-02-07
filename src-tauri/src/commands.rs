@@ -65,6 +65,18 @@ pub async fn start_server(app: tauri::AppHandle, state: State<'_, AppState>) -> 
     let config_path_str = config_path.to_string_lossy().to_string();
     let binary_path_str = binary_path.to_string_lossy().to_string();
 
+    // Always perform a clean restart so stale background processes cannot block startup.
+    {
+        let mut tp = state.thinking_proxy.write().await;
+        tp.stop().await;
+    }
+    {
+        let mut sm = state.server_manager.write().await;
+        sm.stop().await;
+    }
+    ServerManager::kill_orphaned_processes().await;
+    ServerManager::cleanup_port_conflicts_for_restart().await?;
+
     // Start thinking proxy first
     {
         let mut tp = state.thinking_proxy.write().await;
