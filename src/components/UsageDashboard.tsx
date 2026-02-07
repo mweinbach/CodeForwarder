@@ -118,12 +118,6 @@ export default function UsageDashboard({
 
       <div className="usage-kpi-grid">
         <div className="stat-card">
-          <span className="stat-label">Total Requests</span>
-          <span className="stat-value">
-            {formatNumber(vibe.summary.total_requests)}
-          </span>
-        </div>
-        <div className="stat-card">
           <span className="stat-label">Total Tokens</span>
           <span className="stat-value">
             {formatNumber(vibe.summary.total_tokens)}
