@@ -24,3 +24,6 @@ nul
 *.njsproj
 *.sln
 *.sw?
+
+# Tauri signing keys (KEEP SECRET!)
+.tauri-vibeproxy.key

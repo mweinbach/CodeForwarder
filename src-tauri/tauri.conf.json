@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "VibeProxy",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "com.automaze.vibeproxy",
   "build": {
     "beforeDevCommand": "bun run dev",
@@ -42,5 +42,15 @@
     "resources": [
       "resources/*"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/mweinbach/vibeproxy-win-rs/releases/latest/download/latest.json"
+      ],
+      "dialog": true,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUzMDE3NjdDN0NDQkI2QUUKUldTdXRzdDhmSFlCVTVHM1lyTGpienl2SEpLd29iU3pWQkUyS2FkVk5ScUNiLzlBM1M1elZBVjkK"
+    }
   }
 }

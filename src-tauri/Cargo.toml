@@ -1,6 +1,6 @@
 [package]
 name = "vibeproxy-win"
-version = "0.1.0"
+version = "0.1.1"
 description = "VibeProxy - OAuth authentication proxy and unified AI model router"
 authors = ["you"]
 edition = "2021"
@@ -43,3 +43,4 @@ zip = "2"
 base64 = "0.22"
 sha2 = "0.10"
 windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+tauri-plugin-updater = "2"
