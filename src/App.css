@@ -123,46 +123,131 @@ a:hover {
 .settings-view {
   position: relative;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   width: 100%;
   height: 100%;
   color: var(--text-primary);
   isolation: isolate;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
 }
 
-.settings-view::before,
-.settings-view::after {
-  content: "";
+.window-controls {
   position: absolute;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: -1;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  z-index: 1000;
+  cursor: default;
 }
 
-.settings-view::before {
+.window-controls:active {
+  cursor: default;
+}
+
+.window-drag-zone {
+  flex: 1;
+  height: 100%;
+  min-width: 0;
+}
+
+.window-buttons {
+  display: flex;
+  height: 100%;
+  cursor: default;
+}
+
+.window-button {
+  width: 46px;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 120ms ease;
+  pointer-events: auto;
+}
+
+.window-button:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
+}
+
+.window-button.close:hover {
+  background: #e81123;
+  color: #ffffff;
+}
+
+.sidebar {
   width: 220px;
-  height: 220px;
-  top: -80px;
-  right: -86px;
-  background: color-mix(in srgb, var(--accent) 20%, transparent);
-  filter: blur(8px);
-}
-
-.settings-view::after {
-  width: 250px;
-  height: 250px;
-  bottom: -120px;
-  left: -90px;
-  background: color-mix(in srgb, var(--ok) 14%, transparent);
-  filter: blur(10px);
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+  backdrop-filter: blur(12px);
+  display: flex;
+  flex-direction: column;
+  padding: 48px 12px 20px;
+  gap: 8px;
+  z-index: 10;
 }
 
 .settings-scroll {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 14px 10px;
+  padding: 52px 32px 32px;
   scrollbar-width: thin;
   scrollbar-color: var(--border-strong) transparent;
+}
+
+.sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 150ms ease;
+  border: 1px solid transparent;
+}
+
+.sidebar-item:hover {
+  background: var(--surface-soft);
+  color: var(--text-primary);
+}
+
+.sidebar-item.active {
+  background: var(--surface-strong);
+  color: var(--accent);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.sidebar-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.sidebar-spacer {
+  flex: 1;
+}
+
+.sidebar-footer {
+  padding: 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  margin-top: 12px;
 }
 
 .settings-scroll::-webkit-scrollbar {
@@ -1010,6 +1095,83 @@ input[type="email"]:focus {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 8px 24px;
+}
+
+.sidebar-title {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-item {
+  background: transparent;
+  border: 1px solid transparent;
+  width: 100%;
+  text-align: left;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.status-pill.running {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  color: var(--ok);
+  border: 1px solid color-mix(in srgb, var(--ok) 25%, transparent);
+}
+
+.status-pill.stopped {
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
+}
+
+.animate-in {
+  animation: slide-up 240ms ease-out;
+}
+
+.section-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.section-title-row .section-title {
+  margin-bottom: 0;
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

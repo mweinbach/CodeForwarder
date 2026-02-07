@@ -13,15 +13,16 @@
     "windows": [
       {
         "title": "VibeProxy",
-        "width": 480,
-        "height": 740,
+        "width": 800,
+        "height": 600,
         "resizable": true,
+        "decorations": false,
         "center": true,
         "label": "main",
         "visible": true,
         "closable": true,
         "minimizable": true,
-        "maximizable": false
+        "maximizable": true
       }
     ],
     "security": {

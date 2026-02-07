@@ -1,3 +1,4 @@
+import { Trash2 } from "lucide-react";
 import type { AuthAccount } from "../types";
 
 interface AccountRowProps {
@@ -32,8 +33,8 @@ export default function AccountRow({
       {account.is_expired && (
         <span className="expired-badge">(expired)</span>
       )}
-      <button type="button" className="btn-remove" onClick={handleRemove}>
-        Remove
+      <button type="button" className="btn-remove" onClick={handleRemove} title="Remove account">
+        <Trash2 size={12} />
       </button>
     </div>
   );

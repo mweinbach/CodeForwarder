@@ -1,5 +1,14 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { 
+  LayoutDashboard, 
+  Cloud, 
+  Settings as SettingsIcon, 
+  FolderOpen,
+  Power,
+  Server,
+  AlertCircle
+} from "lucide-react";
 import { useServerState } from "../hooks/useServerState";
 import { useAuthAccounts } from "../hooks/useAuthAccounts";
 import { useSettings } from "../hooks/useSettings";
@@ -11,7 +20,7 @@ import ServiceRow from "./ServiceRow";
 import VercelGatewayControls from "./VercelGatewayControls";
 import QwenEmailDialog from "./QwenEmailDialog";
 import ZaiApiKeyDialog from "./ZaiApiKeyDialog";
-import Footer from "./Footer";
+import TitleBar from "./TitleBar";
 
 import glyphLight from "../assets/icons/light/glyph.png";
 import iconAntigravityLight from "../assets/icons/light/icon-antigravity.png";
@@ -101,6 +110,7 @@ export default function SettingsView() {
   const [showQwenDialog, setShowQwenDialog] = useState(false);
   const [showZaiDialog, setShowZaiDialog] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
+  const [activeTab, setActiveTab] = useState<"dashboard" | "services" | "settings">("dashboard");
   const operationalError = serverError ?? settingsError ?? accountsError;
 
   useEffect(() => {
@@ -201,142 +211,195 @@ export default function SettingsView() {
 
   return (
     <div className="settings-view">
-      <div className="settings-scroll">
-        <header className="app-hero">
+      <TitleBar />
+      <aside className="sidebar" data-tauri-drag-region>
+        <div className="sidebar-header" data-tauri-drag-region>
           <img src={GLYPH_MAP[themeMode]} alt="VibeProxy" className="app-hero-icon" />
-          <div className="app-hero-copy">
-            <h1 className="app-hero-title">VibeProxy</h1>
-            <p className="app-hero-subtitle">
-              Manage proxy uptime and account routing from one clean dashboard.
-            </p>
-          </div>
-          <div className={`hero-server-pill ${serverState.is_running ? "running" : "stopped"}`}>
-            {serverState.is_running ? "Server online" : "Server offline"}
-          </div>
-        </header>
-        {operationalError ? (
-          <div className="operation-error-banner" role="alert">
-            <p className="operation-error-message">{operationalError}</p>
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={dismissOperationalError}
-            >
-              Dismiss
-            </button>
-          </div>
-        ) : null}
-
-        <div className="stats-grid">
-          <div className="stat-card">
-            <span className="stat-label">Enabled services</span>
-            <span className="stat-value">{enabledServiceCount}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">Active accounts</span>
-            <span className="stat-value">{activeAccounts}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">Expired accounts</span>
-            <span className="stat-value">{expiredAccounts}</span>
-          </div>
+          <span className="sidebar-title">VibeProxy</span>
         </div>
 
-        <section className="settings-section">
-          <div className="section-header">
-            <h2 className="section-title">Server</h2>
-            <p className="section-description">
-              Control local proxy runtime and bundled binary readiness.
-            </p>
-          </div>
-          <ServerStatus
-            isRunning={serverState.is_running}
-            binaryAvailable={serverState.binary_available}
-            binaryDownloading={serverState.binary_downloading}
-            downloadProgress={downloadProgress?.progress ?? null}
-            onStartStop={handleStartStop}
-            onDownloadBinary={downloadBinary}
-          />
-        </section>
+        <nav className="sidebar-nav">
+          <button
+            className={`sidebar-item ${activeTab === "dashboard" ? "active" : ""}`}
+            onClick={() => setActiveTab("dashboard")}
+          >
+            <LayoutDashboard className="sidebar-icon" />
+            Dashboard
+          </button>
+          <button
+            className={`sidebar-item ${activeTab === "services" ? "active" : ""}`}
+            onClick={() => setActiveTab("services")}
+          >
+            <Cloud className="sidebar-icon" />
+            Services
+          </button>
+          <button
+            className={`sidebar-item ${activeTab === "settings" ? "active" : ""}`}
+            onClick={() => setActiveTab("settings")}
+          >
+            <SettingsIcon className="sidebar-icon" />
+            Settings
+          </button>
+        </nav>
 
-        <section className="settings-section">
-          <div className="section-header">
-            <h2 className="section-title">General</h2>
-            <p className="section-description">Desktop behavior and local file access.</p>
+        <div className="sidebar-spacer" data-tauri-drag-region />
+
+        <div className="sidebar-footer">
+          <div className={`status-pill ${serverState.is_running ? "running" : "stopped"}`}>
+            <Power className="status-icon" size={12} />
+            {serverState.is_running ? "Online" : "Offline"}
           </div>
-          <div className="setting-row">
-            <div className="setting-label">
-              <span>Launch at login</span>
-              <small>Start VibeProxy with Windows.</small>
+        </div>
+      </aside>
+
+      <main className="settings-scroll">
+        {activeTab === "dashboard" && (
+          <div className="tab-content animate-in">
+            <header className="app-hero">
+              <div className="app-hero-copy">
+                <h1 className="app-hero-title">Welcome back</h1>
+                <p className="app-hero-subtitle">
+                  Manage your proxy uptime and account routing.
+                </p>
+              </div>
+            </header>
+
+            {operationalError ? (
+              <div className="operation-error-banner" role="alert">
+                <AlertCircle size={16} className="error-icon" />
+                <p className="operation-error-message">{operationalError}</p>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={dismissOperationalError}
+                >
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
+
+            <div className="stats-grid">
+              <div className="stat-card">
+                <span className="stat-label">Enabled services</span>
+                <span className="stat-value">{enabledServiceCount}</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-label">Active accounts</span>
+                <span className="stat-value">{activeAccounts}</span>
+              </div>
+              <div className="stat-card">
+                <span className="stat-label">Expired accounts</span>
+                <span className="stat-value">{expiredAccounts}</span>
+              </div>
             </div>
-            <label className="toggle-switch">
-              <input
-                type="checkbox"
-                checked={settings.launch_at_login}
-                onChange={(e) => setLaunchAtLogin(e.target.checked)}
+
+            <section className="settings-section">
+              <div className="section-header">
+                <div className="section-title-row">
+                  <Server size={14} />
+                  <h2 className="section-title">Proxy Engine</h2>
+                </div>
+                <p className="section-description">
+                  Control local proxy runtime and bundled binary readiness.
+                </p>
+              </div>
+              <ServerStatus
+                isRunning={serverState.is_running}
+                binaryAvailable={serverState.binary_available}
+                binaryDownloading={serverState.binary_downloading}
+                downloadProgress={downloadProgress?.progress ?? null}
+                onStartStop={handleStartStop}
+                onDownloadBinary={downloadBinary}
               />
-              <span className="toggle-slider" />
-            </label>
+            </section>
           </div>
-          <div className="setting-row">
-            <div className="setting-label">
-              <span>Auth files</span>
-              <small>Open the folder where account files are stored.</small>
-            </div>
-            <button
-              className="btn btn-sm"
-              type="button"
-              onClick={() => invoke("open_auth_folder")}
-            >
-              Open Folder
-            </button>
-          </div>
-        </section>
+        )}
 
-        <section className="settings-section">
-          <div className="section-header">
-            <h2 className="section-title">Services</h2>
-            <p className="section-description">Enable providers and manage connected accounts.</p>
+        {activeTab === "services" && (
+          <div className="tab-content animate-in">
+            <section className="settings-section">
+              <div className="section-header">
+                <h2 className="section-title">Providers</h2>
+                <p className="section-description">Enable providers and manage connected accounts.</p>
+              </div>
+              {authResult ? (
+                <div
+                  className={`auth-result-banner ${authResult.success ? "success" : "error"}`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  <p className="auth-result-message">{authResult.message}</p>
+                </div>
+              ) : null}
+              <div className="service-list">
+                {SERVICE_ORDER.map((serviceType) => (
+                  <ServiceRow
+                    key={serviceType}
+                    serviceType={serviceType}
+                    accounts={getAccounts(serviceType)}
+                    isEnabled={isProviderEnabled(serviceType)}
+                    isAuthenticating={authenticatingService === serviceType}
+                    onConnect={() => handleConnect(serviceType)}
+                    onDisconnect={(filePath) => deleteAccount(filePath)}
+                    onToggleEnabled={(enabled) =>
+                      setProviderEnabled(PROVIDER_KEYS[serviceType], enabled)
+                    }
+                    icon={SERVICE_ICON_MAP[themeMode][serviceType]}
+                    customTitle={getCustomTitle(serviceType)}
+                  >
+                    {serviceType === "claude" ? (
+                      <VercelGatewayControls
+                        enabled={settings.vercel_gateway_enabled}
+                        apiKey={settings.vercel_api_key}
+                        onSave={setVercelConfig}
+                      />
+                    ) : undefined}
+                  </ServiceRow>
+                ))}
+              </div>
+            </section>
           </div>
-          {authResult ? (
-            <div
-              className={`auth-result-banner ${authResult.success ? "success" : "error"}`}
-              role="status"
-              aria-live="polite"
-            >
-              <p className="auth-result-message">{authResult.message}</p>
-            </div>
-          ) : null}
-          <div className="service-list">
-            {SERVICE_ORDER.map((serviceType) => (
-              <ServiceRow
-                key={serviceType}
-                serviceType={serviceType}
-                accounts={getAccounts(serviceType)}
-                isEnabled={isProviderEnabled(serviceType)}
-                isAuthenticating={authenticatingService === serviceType}
-                onConnect={() => handleConnect(serviceType)}
-                onDisconnect={(filePath) => deleteAccount(filePath)}
-                onToggleEnabled={(enabled) =>
-                  setProviderEnabled(PROVIDER_KEYS[serviceType], enabled)
-                }
-                icon={SERVICE_ICON_MAP[themeMode][serviceType]}
-                customTitle={getCustomTitle(serviceType)}
-              >
-                {serviceType === "claude" ? (
-                  <VercelGatewayControls
-                    enabled={settings.vercel_gateway_enabled}
-                    apiKey={settings.vercel_api_key}
-                    onSave={setVercelConfig}
+        )}
+
+        {activeTab === "settings" && (
+          <div className="tab-content animate-in">
+            <section className="settings-section">
+              <div className="section-header">
+                <h2 className="section-title">General Settings</h2>
+                <p className="section-description">Desktop behavior and local file access.</p>
+              </div>
+              <div className="setting-row">
+                <div className="setting-label">
+                  <span>Launch at login</span>
+                  <small>Start VibeProxy with Windows.</small>
+                </div>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={settings.launch_at_login}
+                    onChange={(e) => setLaunchAtLogin(e.target.checked)}
                   />
-                ) : undefined}
-              </ServiceRow>
-            ))}
+                  <span className="toggle-slider" />
+                </label>
+              </div>
+              <div className="setting-row">
+                <div className="setting-label">
+                  <span>Auth files</span>
+                  <small>Open the folder where account files are stored.</small>
+                </div>
+                <button
+                  className="btn btn-sm"
+                  type="button"
+                  onClick={() => invoke("open_auth_folder")}
+                >
+                  <FolderOpen size={14} />
+                  Open Folder
+                </button>
+              </div>
+            </section>
           </div>
-        </section>
-      </div>
-
-      <Footer />
+        )}
+      </main>
 
       <QwenEmailDialog
         isOpen={showQwenDialog}
@@ -351,3 +414,4 @@ export default function SettingsView() {
     </div>
   );
 }
+

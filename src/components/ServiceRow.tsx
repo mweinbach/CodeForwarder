@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Plus, ChevronDown, ChevronUp } from "lucide-react";
 import type { ServiceType, AuthAccount } from "../types";
 import { SERVICE_DISPLAY_NAMES } from "../types";
 import AccountRow from "./AccountRow";
@@ -62,7 +63,8 @@ export default function ServiceRow({
           <span className="spinner" />
         ) : isEnabled ? (
           <button type="button" className="btn btn-sm" onClick={onConnect}>
-            Add account
+            <Plus size={14} />
+            Add
           </button>
         ) : (
           <span className="service-disabled-pill">Disabled</span>
@@ -97,7 +99,9 @@ export default function ServiceRow({
                     Round-robin w/ auto-failover
                   </span>
                 )}
-                <span className={`chevron ${isExpanded ? "open" : ""}`}>&gt;</span>
+                <span className="chevron-icon">
+                  {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </span>
               </button>
 
               {isExpanded && (

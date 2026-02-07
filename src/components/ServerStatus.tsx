@@ -1,3 +1,5 @@
+import { Download, Play, Square } from "lucide-react";
+
 interface ServerStatusProps {
   isRunning: boolean;
   binaryAvailable: boolean;
@@ -47,6 +49,7 @@ export default function ServerStatus({
             </div>
           ) : (
             <button className="btn btn-primary" onClick={onDownloadBinary}>
+              <Download size={14} />
               Download Runtime
             </button>
           )}
@@ -69,8 +72,8 @@ export default function ServerStatus({
           className={`btn btn-status ${isRunning ? "is-running" : "is-stopped"}`}
           onClick={onStartStop}
         >
-          <span className={`status-dot ${isRunning ? "running" : "stopped"}`} />
-          <span>{isRunning ? "Running" : "Stopped"}</span>
+          {isRunning ? <Square size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
+          <span>{isRunning ? "Stop Server" : "Start Server"}</span>
         </button>
       </div>
     </div>
