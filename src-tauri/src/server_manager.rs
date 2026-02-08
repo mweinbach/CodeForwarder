@@ -573,7 +573,8 @@ impl ServerManager {
 
         for (pid, ports) in pid_to_ports {
             #[cfg(target_os = "windows")]
-            let Some(image_name) = tasklist_image_name_for_pid(pid).await else {
+            let Some(image_name) = tasklist_image_name_for_pid(pid).await
+            else {
                 return Err(format!(
                     "Ports {:?} are in use by PID {} but process lookup failed",
                     ports, pid
@@ -581,7 +582,8 @@ impl ServerManager {
             };
 
             #[cfg(not(target_os = "windows"))]
-            let Some(image_name) = ps_command_for_pid(pid).await else {
+            let Some(image_name) = ps_command_for_pid(pid).await
+            else {
                 return Err(format!(
                     "Ports {:?} are in use by PID {} but process lookup failed",
                     ports, pid
@@ -725,12 +727,7 @@ fn parse_lsof_pids(output: &str) -> Vec<u32> {
 async fn lsof_pids_listening_on_tcp_port(port: u16) -> Result<Vec<u32>, String> {
     // `lsof -t` returns pids only; exit code 1 means no matches.
     let output = Command::new("lsof")
-        .args([
-            "-nP",
-            &format!("-iTCP:{}", port),
-            "-sTCP:LISTEN",
-            "-t",
-        ])
+        .args(["-nP", &format!("-iTCP:{}", port), "-sTCP:LISTEN", "-t"])
         .output()
         .await
         .map_err(|e| format!("Failed to run lsof for port {}: {}", port, e))?;
@@ -781,7 +778,9 @@ async fn list_port_listeners_unix() -> Result<Vec<(u16, u32, String)>, String> {
 
     let mut out = Vec::new();
     for (pid, ports) in pid_to_ports {
-        let name = ps_command_for_pid(pid).await.unwrap_or_else(|| "unknown".to_string());
+        let name = ps_command_for_pid(pid)
+            .await
+            .unwrap_or_else(|| "unknown".to_string());
         for port in ports {
             out.push((port, pid, name.clone()));
         }

@@ -4,9 +4,7 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 
 use crate::auth_manager;
-use crate::types::{
-    UsageBreakdownRow, UsageSummary, UsageTimeseriesPoint, VibeUsageDashboard,
-};
+use crate::types::{UsageBreakdownRow, UsageSummary, UsageTimeseriesPoint, VibeUsageDashboard};
 
 #[derive(Debug, Clone, Copy)]
 pub enum UsageRangeQuery {
@@ -421,7 +419,10 @@ impl UsageTracker {
         .map_err(|e| format!("Failed to join usage write task: {}", e))?
     }
 
-    pub async fn get_vibe_dashboard(&self, range: UsageRangeQuery) -> Result<VibeUsageDashboard, String> {
+    pub async fn get_vibe_dashboard(
+        &self,
+        range: UsageRangeQuery,
+    ) -> Result<VibeUsageDashboard, String> {
         let db_path = self.db_path.clone();
         tokio::task::spawn_blocking(move || {
             let conn = Self::open_connection(&db_path)?;
@@ -629,10 +630,18 @@ impl UsageTracker {
                     None
                 };
                 breakdown.push(UsageBreakdownRow {
-                    provider: row.get::<_, String>(0).unwrap_or_else(|_| "unknown".to_string()),
-                    model: row.get::<_, String>(1).unwrap_or_else(|_| "unknown".to_string()),
-                    account_key: row.get::<_, String>(2).unwrap_or_else(|_| "unknown".to_string()),
-                    account_label: row.get::<_, String>(3).unwrap_or_else(|_| "unknown".to_string()),
+                    provider: row
+                        .get::<_, String>(0)
+                        .unwrap_or_else(|_| "unknown".to_string()),
+                    model: row
+                        .get::<_, String>(1)
+                        .unwrap_or_else(|_| "unknown".to_string()),
+                    account_key: row
+                        .get::<_, String>(2)
+                        .unwrap_or_else(|_| "unknown".to_string()),
+                    account_label: row
+                        .get::<_, String>(3)
+                        .unwrap_or_else(|_| "unknown".to_string()),
                     requests: row.get::<_, i64>(4).unwrap_or(0),
                     total_tokens: row.get::<_, i64>(5).unwrap_or(0),
                     input_tokens: row.get::<_, i64>(6).unwrap_or(0),
@@ -654,5 +663,4 @@ impl UsageTracker {
         .await
         .map_err(|e| format!("Failed to join usage dashboard query task: {}", e))?
     }
-
 }

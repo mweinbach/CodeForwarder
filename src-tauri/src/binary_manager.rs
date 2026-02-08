@@ -83,8 +83,8 @@ fn release_asset_suffix() -> Result<&'static str, String> {
 fn ensure_executable(path: &std::path::Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
 
-    let metadata = std::fs::metadata(path)
-        .map_err(|e| format!("Failed to stat runtime binary: {}", e))?;
+    let metadata =
+        std::fs::metadata(path).map_err(|e| format!("Failed to stat runtime binary: {}", e))?;
     let mut perms = metadata.permissions();
     let mode = perms.mode();
     if mode & 0o111 != 0 {
@@ -147,9 +147,7 @@ pub fn get_binary_path() -> PathBuf {
 pub fn get_bundled_binary_path(app_handle: &tauri::AppHandle) -> Option<PathBuf> {
     let resource_dir = app_handle.path().resource_dir().ok()?;
 
-    let nested = resource_dir
-        .join("resources")
-        .join(runtime_binary_name());
+    let nested = resource_dir.join("resources").join(runtime_binary_name());
     if nested.exists() {
         return Some(nested);
     }
@@ -411,7 +409,9 @@ pub async fn download_binary(
     let bin_for_extract = temp_bin_path.clone();
     tokio::task::spawn_blocking(move || match release_archive_kind() {
         ReleaseArchiveKind::Zip => extract_binary_from_zip(&archive_for_extract, &bin_for_extract),
-        ReleaseArchiveKind::TarGz => extract_binary_from_targz(&archive_for_extract, &bin_for_extract),
+        ReleaseArchiveKind::TarGz => {
+            extract_binary_from_targz(&archive_for_extract, &bin_for_extract)
+        }
     })
     .await
     .map_err(|e| format!("Failed to join archive extraction task: {}", e))??;

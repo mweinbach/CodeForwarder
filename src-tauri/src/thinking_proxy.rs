@@ -66,7 +66,10 @@ pub struct ThinkingProxy {
 }
 
 impl ThinkingProxy {
-    pub fn new(vercel_config: Arc<RwLock<VercelGatewayConfig>>, usage_tracker: Arc<UsageTracker>) -> Self {
+    pub fn new(
+        vercel_config: Arc<RwLock<VercelGatewayConfig>>,
+        usage_tracker: Arc<UsageTracker>,
+    ) -> Self {
         Self {
             proxy_port: 8317,
             target_port: 8318,
@@ -380,7 +383,12 @@ async fn handle_request(
                     }
                     Err(e) => {
                         log::error!("[ThinkingProxy] Backend retry error: {}", e);
-                        record_usage_if_needed(usage_tracker.clone(), tracking_seed, 502, Bytes::new());
+                        record_usage_if_needed(
+                            usage_tracker.clone(),
+                            tracking_seed,
+                            502,
+                            Bytes::new(),
+                        );
                         make_response(StatusCode::BAD_GATEWAY, "Bad Gateway")
                     }
                 });
@@ -662,9 +670,10 @@ fn parse_usage_object(value: &serde_json::Value) -> Option<TokenUsage> {
             "candidatesTokenCount",
         ],
     );
-    let total_tokens =
-        find_number_in_object(obj, &["total_tokens", "totalTokenCount", "tokens"])
-            .or_else(|| find_number_in_object_deep(value, &["total_tokens", "totalTokenCount", "tokens"]));
+    let total_tokens = find_number_in_object(obj, &["total_tokens", "totalTokenCount", "tokens"])
+        .or_else(|| {
+            find_number_in_object_deep(value, &["total_tokens", "totalTokenCount", "tokens"])
+        });
     let cached_tokens = find_number_in_object(
         obj,
         &[
@@ -726,7 +735,10 @@ fn parse_usage_object(value: &serde_json::Value) -> Option<TokenUsage> {
     })
 }
 
-fn find_number_in_object(obj: &serde_json::Map<String, serde_json::Value>, keys: &[&str]) -> Option<i64> {
+fn find_number_in_object(
+    obj: &serde_json::Map<String, serde_json::Value>,
+    keys: &[&str],
+) -> Option<i64> {
     for key in keys {
         if let Some(value) = obj.get(*key) {
             if let Some(parsed) = value.as_i64() {

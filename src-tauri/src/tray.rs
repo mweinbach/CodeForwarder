@@ -114,6 +114,13 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
 }
 
 fn show_main_window(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    {
+        // If the app is running as a UIElement (no Dock icon), bring it back
+        // when showing the main window.
+        app.set_dock_visibility(true).ok();
+    }
+
     if let Some(window) = app.get_webview_window("main") {
         window.show().ok();
         window.unminimize().ok();

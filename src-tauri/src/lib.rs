@@ -36,6 +36,13 @@ pub fn run() {
         ))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            #[cfg(target_os = "macos")]
+            {
+                // If the app is running without a Dock icon (UIElement), restore Dock visibility
+                // when the user re-opens the app (Spotlight/Finder/etc).
+                app.set_dock_visibility(true).ok();
+            }
+
             if let Some(window) = app.get_webview_window("main") {
                 window.show().ok();
                 window.unminimize().ok();
@@ -360,6 +367,13 @@ pub fn run() {
                         api.prevent_close();
                         if let Some(win) = close_handle.get_webview_window("main") {
                             win.hide().ok();
+                        }
+
+                        #[cfg(target_os = "macos")]
+                        {
+                            // On macOS, behave like a menu-bar app when the main window is closed:
+                            // keep running (tray icon still visible) but remove the Dock icon.
+                            close_handle.set_dock_visibility(false).ok();
                         }
                     }
                 });
