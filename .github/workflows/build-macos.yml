@@ -1,0 +1,69 @@
+name: Build macOS (Tauri)
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Git ref to build (branch, tag, or SHA)
+        required: true
+        default: main
+      release_tag:
+        description: Optional. Upload artifacts to an existing GitHub release tag (e.g. v0.1.2)
+        required: false
+        default: ""
+
+jobs:
+  build:
+    runs-on: macos-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.6"
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install macOS targets (universal build)
+        run: |
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Install JS deps
+        run: bun install --frozen-lockfile
+
+      - name: Build (universal DMG)
+        env:
+          # Ensure we use rustup-managed toolchain (not system/Homebrew).
+          RUSTC: ${{ env.HOME }}/.cargo/bin/rustc
+        run: |
+          bun run tauri build --ci -t universal-apple-darwin --runner $HOME/.cargo/bin/cargo
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vibeproxy-macos
+          if-no-files-found: error
+          path: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+
+      - name: Upload to GitHub release (optional)
+        if: ${{ inputs.release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ inputs.release_tag }}" \
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg \
+            --clobber
+
