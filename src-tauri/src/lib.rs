@@ -118,8 +118,8 @@ pub fn run() {
                     window
                         .set_title_bar_style(tauri::TitleBarStyle::Overlay)
                         .ok();
-                    // Avoid showing a centered window title in the titlebar area.
-                    window.set_title("").ok();
+                    // Ensure the window title matches the app product name.
+                    window.set_title("VibeProxy").ok();
                 }
             }
 
