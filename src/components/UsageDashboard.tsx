@@ -71,7 +71,7 @@ export default function UsageDashboard({
   return (
     <div className="usage-dashboard">
       <section className="settings-section usage-controls">
-        <div className="section-header">
+        <div className="section-header" data-tauri-drag-region>
           <div className="section-title-row">
             <BarChart3 size={14} />
             <h2 className="section-title">Usage Analytics</h2>

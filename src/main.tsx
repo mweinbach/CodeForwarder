@@ -8,6 +8,16 @@ import glyphDark from "./assets/icons/dark/glyph.png";
 
 const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
+function syncPlatformAttribute() {
+  const ua = navigator.userAgent;
+  const platform = /Macintosh|Mac OS X/.test(ua)
+    ? "macos"
+    : /Windows/.test(ua)
+      ? "windows"
+      : "other";
+  document.documentElement.setAttribute("data-platform", platform);
+}
+
 function syncFavicon() {
   const iconHref = mediaQuery.matches ? glyphDark : glyphLight;
   const existingIcon = document.querySelector("link[rel='icon']") as
@@ -40,6 +50,7 @@ function syncIcons() {
   void syncNativeIcons();
 }
 
+syncPlatformAttribute();
 syncIcons();
 mediaQuery.addEventListener("change", syncIcons);
 

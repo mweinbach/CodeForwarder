@@ -86,7 +86,7 @@ function isMacOS(): boolean {
 }
 
 function shouldShowCustomTitleBar(): boolean {
-  // macOS uses native window decorations in the desktop app.
+  // On macOS we use the native traffic lights with an overlay titlebar.
   return !(isTauriRuntime() && isMacOS());
 }
 
@@ -293,7 +293,7 @@ export default function SettingsView() {
       <main className="settings-scroll">
         {activeTab === "dashboard" && (
           <div className="tab-content animate-in">
-            <header className="app-hero">
+            <header className="app-hero" data-tauri-drag-region>
               <div className="app-hero-copy">
                 <h1 className="app-hero-title">Welcome back</h1>
                 <p className="app-hero-subtitle">
@@ -332,7 +332,7 @@ export default function SettingsView() {
             </div>
 
             <section className="settings-section">
-              <div className="section-header">
+              <div className="section-header" data-tauri-drag-region>
                 <div className="section-title-row">
                   <Server size={14} />
                   <h2 className="section-title">Proxy Engine</h2>
@@ -370,7 +370,7 @@ export default function SettingsView() {
         {activeTab === "services" && (
           <div className="tab-content animate-in">
             <section className="settings-section">
-              <div className="section-header">
+              <div className="section-header" data-tauri-drag-region>
                 <h2 className="section-title">Providers</h2>
                 <p className="section-description">Enable providers and manage connected accounts.</p>
               </div>
@@ -416,7 +416,7 @@ export default function SettingsView() {
         {activeTab === "settings" && (
           <div className="tab-content animate-in">
             <section className="settings-section">
-              <div className="section-header">
+              <div className="section-header" data-tauri-drag-region>
                 <h2 className="section-title">General Settings</h2>
                 <p className="section-description">Desktop behavior and local file access.</p>
               </div>

@@ -207,6 +207,11 @@ a:hover {
   scrollbar-color: var(--border-strong) transparent;
 }
 
+html[data-platform="macos"] .settings-scroll {
+  /* With a macOS overlay titlebar, let content start higher (under the titlebar). */
+  padding-top: 28px;
+}
+
 .sidebar-item {
   display: flex;
   align-items: center;
