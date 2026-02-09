@@ -53,6 +53,7 @@ In Services → Claude:
 
 - Ensure Bun and Rust are installed.
 - Ensure Node.js version supports global `fetch` (Node 18+).
+- Linux (Ubuntu): ensure Tauri system deps are installed (notably `pkg-config`, `libglib2.0-dev`, `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`).
 - Retry from a clean state:
 
 ```bash

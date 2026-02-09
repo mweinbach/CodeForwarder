@@ -32,5 +32,6 @@ nul
 src-tauri/resources/cli-proxy-api-plus
 src-tauri/resources/cli-proxy-api-plus.exe
 src-tauri/resources/cli-proxy-api-plus.version
+src-tauri/resources/cli-proxy-api-plus.*.version
 src-tauri/resources/cli-proxy-api-plus.download.*
 src-tauri/resources/cli-proxy-api-plus.extract.tmp/

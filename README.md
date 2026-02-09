@@ -1,6 +1,6 @@
-# VibeProxy (macOS + Windows)
+# VibeProxy (macOS + Windows + Linux)
 
-VibeProxy is a desktop app (macOS + Windows) that runs a local OAuth/authentication proxy and unified model router on `http://localhost:8317`.
+VibeProxy is a desktop app (macOS + Windows + Linux) that runs a local OAuth/authentication proxy and unified model router on `http://localhost:8317`.
 
 It’s built with **Tauri 2 (Rust)** + **React 19 / Vite / TypeScript**, and bundles (or downloads) the **CLIProxyAPIPlus** runtime used to perform provider logins and serve the backend API.
 
@@ -17,10 +17,12 @@ It’s built with **Tauri 2 (Rust)** + **React 19 / Vite / TypeScript**, and bun
 
 ## Prerequisites
 
-- macOS (Apple Silicon or Intel) or Windows 10/11
+- macOS (Apple Silicon or Intel), Windows 10/11, or Ubuntu/Linux
 - **Bun** (used by `src-tauri/tauri.conf.json` for dev/build orchestration)
 - **Node.js 18+** (required for `scripts/sync-cli-proxy-binary.mjs` because it uses `fetch`)
 - Rust toolchain (stable) + Tauri prerequisites
+  - Ubuntu: install Tauri Linux deps (system webview and tray deps). Typical set:
+    - `pkg-config`, `libglib2.0-dev`, `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `build-essential`
 
 ## Quick start (development)
 
@@ -63,6 +65,7 @@ Point your client/tooling at:
   - VibeProxy also writes `merged-config.yaml` here when providers are toggled or Z.AI keys are added.
 - Downloaded runtime binary: `%LOCALAPPDATA%\vibeproxy\cli-proxy-api-plus.exe`
 - Downloaded runtime binary (macOS): `~/Library/Application Support/vibeproxy/cli-proxy-api-plus`
+- Downloaded runtime binary (Linux): `~/.local/share/vibeproxy/cli-proxy-api-plus`
 - App settings: stored via Tauri Store (`settings.json`), with the Vercel API key encrypted using Windows DPAPI (base64 fallback on non-Windows).
 - Usage analytics DB: `~/.cli-proxy-api/vibeproxy-usage.db` (local-only)
 

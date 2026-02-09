@@ -26,6 +26,7 @@ Note: `bun run tauri dev` and `bun run tauri build` automatically run `sync:cli-
 1. Platform data dir:
    - Windows: `%LOCALAPPDATA%\vibeproxy\cli-proxy-api-plus.exe`
    - macOS: `~/Library/Application Support/vibeproxy/cli-proxy-api-plus`
+   - Linux: `~/.local/share/vibeproxy/cli-proxy-api-plus` (or `$XDG_DATA_HOME/vibeproxy/cli-proxy-api-plus`)
 2. bundled resource binary (`src-tauri/resources/cli-proxy-api-plus*`)
  - If bundled exists but local copy does not, it is copied into the platform data directory when possible.
 

@@ -14,6 +14,8 @@ function syncPlatformAttribute() {
     ? "macos"
     : /Windows/.test(ua)
       ? "windows"
+      : /Linux/.test(ua)
+        ? "linux"
       : "other";
   document.documentElement.setAttribute("data-platform", platform);
 }

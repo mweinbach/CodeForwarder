@@ -766,12 +766,74 @@ async fn ps_command_for_pid(pid: u32) -> Option<String> {
 }
 
 #[cfg(not(target_os = "windows"))]
-async fn list_port_listeners_unix() -> Result<Vec<(u16, u32, String)>, String> {
-    use std::collections::BTreeMap;
+fn parse_ss_pids(line: &str) -> Vec<u32> {
+    let mut out = Vec::new();
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i + 4 <= bytes.len() {
+        if &bytes[i..i + 4] == b"pid=" {
+            i += 4;
+            let start = i;
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+            if start < i {
+                if let Ok(s) = std::str::from_utf8(&bytes[start..i]) {
+                    if let Ok(pid) = s.parse::<u32>() {
+                        out.push(pid);
+                    }
+                }
+            }
+            continue;
+        }
+        i += 1;
+    }
+    out
+}
 
-    let mut pid_to_ports: BTreeMap<u32, Vec<u16>> = BTreeMap::new();
-    for port in [PROXY_PORT, BACKEND_PORT] {
-        for pid in lsof_pids_listening_on_tcp_port(port).await? {
+#[cfg(not(target_os = "windows"))]
+fn parse_ss_local_port(line: &str) -> Option<u16> {
+    // `ss -lptn` output is whitespace-delimited; the local address is commonly column 4.
+    // We keep this lenient by scanning tokens for the first port-like suffix.
+    for token in line.split_whitespace() {
+        // Skip obvious non-address tokens quickly.
+        if !(token.contains(':') || token.contains("]:")) {
+            continue;
+        }
+        if let Some(last) = token.rsplit(':').next() {
+            if let Ok(port) = last.parse::<u16>() {
+                return Some(port);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn ss_list_port_listeners_unix(ports: &[u16]) -> Result<Vec<(u16, u32, String)>, String> {
+    // `ss` is part of `iproute2` on most distros, and is commonly present even when `lsof` isn't.
+    let output = Command::new("ss")
+        .args(["-H", "-lptn"])
+        .output()
+        .await
+        .map_err(|e| format!("Failed to run ss: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!("ss failed with status {}", output.status));
+    }
+
+    let port_set: std::collections::HashSet<u16> = ports.iter().copied().collect();
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let mut pid_to_ports: std::collections::BTreeMap<u32, Vec<u16>> = std::collections::BTreeMap::new();
+    for line in stdout.lines() {
+        let Some(port) = parse_ss_local_port(line) else {
+            continue;
+        };
+        if !port_set.contains(&port) {
+            continue;
+        }
+        for pid in parse_ss_pids(line) {
             pid_to_ports.entry(pid).or_default().push(port);
         }
     }
@@ -786,6 +848,45 @@ async fn list_port_listeners_unix() -> Result<Vec<(u16, u32, String)>, String> {
         }
     }
     Ok(out)
+}
+
+#[cfg(not(target_os = "windows"))]
+async fn list_port_listeners_unix() -> Result<Vec<(u16, u32, String)>, String> {
+    // Prefer `lsof` when available since it is narrowly scoped per-port, and fall back to `ss`
+    // (commonly available on Ubuntu) when `lsof` is missing.
+    let lsof_available = Command::new("lsof").arg("-v").output().await.is_ok();
+    if lsof_available {
+        use std::collections::BTreeMap;
+
+        let mut pid_to_ports: BTreeMap<u32, Vec<u16>> = BTreeMap::new();
+        for port in [PROXY_PORT, BACKEND_PORT] {
+            match lsof_pids_listening_on_tcp_port(port).await {
+                Ok(pids) => {
+                    for pid in pids {
+                        pid_to_ports.entry(pid).or_default().push(port);
+                    }
+                }
+                Err(err) => {
+                    // If `lsof` exists but fails (permissions, etc), report the error rather than
+                    // silently ignoring potential port conflicts.
+                    return Err(err);
+                }
+            }
+        }
+
+        let mut out = Vec::new();
+        for (pid, ports) in pid_to_ports {
+            let name = ps_command_for_pid(pid)
+                .await
+                .unwrap_or_else(|| "unknown".to_string());
+            for port in ports {
+                out.push((port, pid, name.clone()));
+            }
+        }
+        return Ok(out);
+    }
+
+    ss_list_port_listeners_unix(&[PROXY_PORT, BACKEND_PORT]).await
 }
 
 #[cfg(target_os = "windows")]

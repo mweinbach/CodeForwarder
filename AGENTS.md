@@ -22,9 +22,11 @@
 - When cutting a new version/tag (`vX.Y.Z`), trigger remote builds for that exact ref and (optionally) upload the artifacts to the matching GitHub release tag:
   - macOS builds: `aarch64-apple-darwin` and `x86_64-apple-darwin` DMGs
   - Windows builds: `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc` installers (NSIS + MSI)
+  - Linux builds: `x86_64-unknown-linux-gnu` bundles (AppImage + `.deb`)
 - Example (requires the GitHub release tag to already exist):
   - `gh workflow run "Build macOS (Tauri)" -f ref=vX.Y.Z -f release_tag=vX.Y.Z`
   - `gh workflow run "Build Windows (Tauri)" -f ref=vX.Y.Z -f release_tag=vX.Y.Z`
+  - `gh workflow run "Build Linux (Tauri)" -f ref=vX.Y.Z -f release_tag=vX.Y.Z`
 
 ## Coding Style & Naming Conventions
 - Frontend: 2-space indentation, semicolons, double quotes, PascalCase component files (`SettingsView.tsx`), camelCase functions/hooks (`useServerState`), and colocated hooks under `src/hooks/`.
