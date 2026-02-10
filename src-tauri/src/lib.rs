@@ -1,7 +1,9 @@
 mod auth_manager;
 mod binary_manager;
+mod cliproxy_management;
 mod commands;
 mod config_manager;
+mod factory_settings;
 mod managed_key;
 mod secure_store;
 mod server_manager;
@@ -67,6 +69,11 @@ pub fn run() {
             commands::copy_server_url,
             commands::sync_theme_icons,
             commands::get_usage_dashboard,
+            commands::get_provider_model_definitions,
+            commands::list_factory_custom_models,
+            commands::install_agent_models,
+            commands::update_factory_custom_model,
+            commands::remove_factory_custom_models,
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -101,6 +108,7 @@ pub fn run() {
                 usage_tracker.clone(),
             )));
             let lifecycle_lock = Arc::new(Mutex::new(()));
+            let factory_settings_lock = Arc::new(Mutex::new(()));
             let binary_downloading = Arc::new(AtomicBool::new(false));
 
             // Register app state
@@ -110,6 +118,7 @@ pub fn run() {
                 lifecycle_lock: lifecycle_lock.clone(),
                 binary_downloading: binary_downloading.clone(),
                 usage_tracker: usage_tracker.clone(),
+                factory_settings_lock: factory_settings_lock.clone(),
             });
 
             // Setup system tray

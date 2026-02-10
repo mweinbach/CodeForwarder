@@ -140,3 +140,79 @@ export const SERVICE_ICONS: Record<ServiceType, string> = {
   antigravity: "icon-antigravity.png",
   zai: "icon-zai.png",
 };
+
+// ---------------------------------------------------------------------------
+// Models / Agents
+// ---------------------------------------------------------------------------
+
+export interface ThinkingSupport {
+  min?: number;
+  max?: number;
+  zero_allowed?: boolean;
+  dynamic_allowed?: boolean;
+  levels?: string[];
+}
+
+export interface ProviderModelInfo {
+  id: string;
+  object?: string;
+  created?: number;
+  owned_by?: string;
+  model_type?: string;
+  display_name?: string;
+  version?: string;
+  description?: string;
+  context_length?: number;
+  max_completion_tokens?: number;
+  supported_parameters?: string[];
+  supported_endpoints?: string[];
+  thinking?: ThinkingSupport;
+}
+
+export interface ProviderModelDefinitionsResponse {
+  channel: string;
+  models: ProviderModelInfo[];
+}
+
+export interface FactoryCustomModelInput {
+  model: string;
+  baseUrl: string;
+  apiKey: string;
+  displayName: string;
+  noImageSupport: boolean;
+  provider: string;
+}
+
+export interface FactoryCustomModelRow {
+  id: string;
+  index?: number;
+  model: string;
+  baseUrl: string;
+  displayName: string;
+  noImageSupport: boolean;
+  provider: string;
+  isProxy: boolean;
+  isSessionDefault: boolean;
+}
+
+export interface FactoryCustomModelsState {
+  factorySettingsPath: string;
+  sessionDefaultModel?: string;
+  models: FactoryCustomModelRow[];
+}
+
+export interface FactoryCustomModelsRemoveResult {
+  removed: number;
+  skippedNonProxy: number;
+  skippedNotFound: number;
+  factorySettingsPath: string;
+}
+
+export interface AgentInstallResult {
+  agent_key: string;
+  total_requested: number;
+  added: number;
+  skipped_duplicates: number;
+  skipped_invalid: number;
+  factory_settings_path: string;
+}

@@ -210,3 +210,103 @@ pub struct VibeUsageDashboard {
 pub struct UsageDashboardPayload {
     pub vibe: VibeUsageDashboard,
 }
+
+// ---------------------------------------------------------------------------
+// CLIProxyAPIPlus model definitions (management API)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderModelDefinitionsResponse {
+    pub channel: String,
+    pub models: Vec<ProviderModelInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ProviderModelInfo {
+    pub id: String,
+    pub object: Option<String>,
+    pub created: Option<i64>,
+    pub owned_by: Option<String>,
+    #[serde(rename = "type")]
+    pub model_type: Option<String>,
+    #[serde(alias = "displayName")]
+    pub display_name: Option<String>,
+    pub version: Option<String>,
+    pub description: Option<String>,
+    #[serde(alias = "contextLength")]
+    pub context_length: Option<i64>,
+    #[serde(alias = "maxCompletionTokens")]
+    pub max_completion_tokens: Option<i64>,
+    #[serde(alias = "supportedParameters")]
+    pub supported_parameters: Option<Vec<String>>,
+    #[serde(alias = "supportedEndpoints")]
+    pub supported_endpoints: Option<Vec<String>>,
+    pub thinking: Option<ThinkingSupport>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ThinkingSupport {
+    pub min: Option<i64>,
+    pub max: Option<i64>,
+    #[serde(alias = "zeroAllowed")]
+    pub zero_allowed: Option<bool>,
+    #[serde(alias = "dynamicAllowed")]
+    pub dynamic_allowed: Option<bool>,
+    pub levels: Option<Vec<String>>,
+}
+
+// ---------------------------------------------------------------------------
+// Factory custom models (writes to ~/.factory/settings.json)
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FactoryCustomModelInput {
+    pub model: String,
+    pub base_url: String,
+    pub api_key: String,
+    pub display_name: String,
+    pub no_image_support: bool,
+    pub provider: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FactoryCustomModelRow {
+    pub id: String,
+    pub index: Option<i64>,
+    pub model: String,
+    pub base_url: String,
+    pub display_name: String,
+    pub no_image_support: bool,
+    pub provider: String,
+    pub is_proxy: bool,
+    pub is_session_default: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FactoryCustomModelsState {
+    pub factory_settings_path: String,
+    pub session_default_model: Option<String>,
+    pub models: Vec<FactoryCustomModelRow>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FactoryCustomModelsRemoveResult {
+    pub removed: usize,
+    pub skipped_non_proxy: usize,
+    pub skipped_not_found: usize,
+    pub factory_settings_path: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AgentInstallResult {
+    pub agent_key: String,
+    pub total_requested: usize,
+    pub added: usize,
+    pub skipped_duplicates: usize,
+    pub skipped_invalid: usize,
+    pub factory_settings_path: String,
+}

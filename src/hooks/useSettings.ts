@@ -61,7 +61,7 @@ export function useSettings() {
         };
       });
       try {
-        await invoke("set_vercel_config", { enabled, api_key: apiKey });
+        await invoke("set_vercel_config", { enabled, apiKey });
         setLastError(null);
       } catch (err) {
         console.error("Failed to set Vercel config:", err);

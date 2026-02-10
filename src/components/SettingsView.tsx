@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { 
+import {
   LayoutDashboard, 
   Cloud, 
   PieChart,
+  Boxes,
+  Bot,
   Settings as SettingsIcon, 
   FolderOpen,
   Power,
@@ -24,6 +26,8 @@ import QwenEmailDialog from "./QwenEmailDialog";
 import ZaiApiKeyDialog from "./ZaiApiKeyDialog";
 import TitleBar from "./TitleBar";
 import UsageDashboard from "./UsageDashboard";
+import ModelsTab from "./ModelsTab";
+import AgentsTab from "./AgentsTab";
 
 import glyphLight from "../assets/icons/light/glyph.png";
 import iconAntigravityLight from "../assets/icons/light/icon-antigravity.png";
@@ -132,7 +136,9 @@ export default function SettingsView() {
   const [showQwenDialog, setShowQwenDialog] = useState(false);
   const [showZaiDialog, setShowZaiDialog] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "usage" | "services" | "settings">("dashboard");
+  const [activeTab, setActiveTab] = useState<
+    "dashboard" | "usage" | "services" | "models" | "agents" | "settings"
+  >("dashboard");
   const {
     range: usageRange,
     setRange: setUsageRange,
@@ -270,6 +276,20 @@ export default function SettingsView() {
           >
             <Cloud className="sidebar-icon" />
             Services
+          </button>
+          <button
+            className={`sidebar-item ${activeTab === "models" ? "active" : ""}`}
+            onClick={() => setActiveTab("models")}
+          >
+            <Boxes className="sidebar-icon" />
+            Models
+          </button>
+          <button
+            className={`sidebar-item ${activeTab === "agents" ? "active" : ""}`}
+            onClick={() => setActiveTab("agents")}
+          >
+            <Bot className="sidebar-icon" />
+            Custom Models
           </button>
           <button
             className={`sidebar-item ${activeTab === "settings" ? "active" : ""}`}
@@ -412,6 +432,10 @@ export default function SettingsView() {
             </section>
           </div>
         )}
+
+        {activeTab === "models" && <ModelsTab />}
+
+        {activeTab === "agents" && <AgentsTab />}
 
         {activeTab === "settings" && (
           <div className="tab-content animate-in">

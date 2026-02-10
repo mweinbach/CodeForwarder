@@ -1,6 +1,8 @@
 use crate::auth_manager;
 use crate::binary_manager;
+use crate::cliproxy_management;
 use crate::config_manager;
+use crate::factory_settings;
 use crate::server_manager::ServerManager;
 use crate::settings;
 use crate::thinking_proxy::ThinkingProxy;
@@ -20,6 +22,7 @@ pub struct AppState {
     pub lifecycle_lock: Arc<Mutex<()>>,
     pub binary_downloading: Arc<AtomicBool>,
     pub usage_tracker: Arc<UsageTracker>,
+    pub factory_settings_lock: Arc<Mutex<()>>,
 }
 
 async fn run_blocking<F, T>(job: F) -> Result<T, String>
@@ -399,4 +402,66 @@ pub async fn get_usage_dashboard(
     let parsed_range = UsageRangeQuery::from_input(&range);
     let vibe = state.usage_tracker.get_vibe_dashboard(parsed_range).await?;
     Ok(UsageDashboardPayload { vibe })
+}
+
+// ---------------------------------------------------------------------------
+// Models / Custom Models (Factory)
+// ---------------------------------------------------------------------------
+
+#[tauri::command]
+pub async fn get_provider_model_definitions(
+    channel: String,
+) -> Result<ProviderModelDefinitionsResponse, String> {
+    cliproxy_management::fetch_provider_model_definitions(&channel).await
+}
+
+#[tauri::command]
+pub async fn list_factory_custom_models(
+    state: State<'_, AppState>,
+) -> Result<FactoryCustomModelsState, String> {
+    let _guard = state.factory_settings_lock.lock().await;
+    run_blocking(move || factory_settings::list_factory_custom_models()).await
+}
+
+#[tauri::command]
+pub async fn remove_factory_custom_models(
+    state: State<'_, AppState>,
+    ids: Vec<String>,
+) -> Result<FactoryCustomModelsRemoveResult, String> {
+    let _guard = state.factory_settings_lock.lock().await;
+    run_blocking(move || factory_settings::remove_factory_custom_models(ids)).await
+}
+
+#[tauri::command]
+pub async fn update_factory_custom_model(
+    state: State<'_, AppState>,
+    id: String,
+    model: Option<String>,
+    base_url: Option<String>,
+    display_name: Option<String>,
+    no_image_support: Option<bool>,
+    provider: Option<String>,
+) -> Result<FactoryCustomModelRow, String> {
+    let _guard = state.factory_settings_lock.lock().await;
+    run_blocking(move || {
+        factory_settings::update_factory_custom_model(
+            &id,
+            model,
+            base_url,
+            display_name,
+            no_image_support,
+            provider,
+        )
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn install_agent_models(
+    state: State<'_, AppState>,
+    agent_key: String,
+    models: Vec<FactoryCustomModelInput>,
+) -> Result<AgentInstallResult, String> {
+    let _guard = state.factory_settings_lock.lock().await;
+    run_blocking(move || factory_settings::install_agent_models(&agent_key, models)).await
 }

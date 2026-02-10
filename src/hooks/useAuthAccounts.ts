@@ -80,7 +80,7 @@ export function useAuthAccounts() {
   const deleteAccount = useCallback(
     async (filePath: string) => {
       try {
-        await invoke("delete_auth_account", { file_path: filePath });
+        await invoke("delete_auth_account", { filePath });
         setLastError(null);
       } catch (err) {
         console.error("Failed to delete account:", err);
@@ -93,7 +93,7 @@ export function useAuthAccounts() {
   const saveZaiKey = useCallback(
     async (apiKey: string) => {
       try {
-        await invoke("save_zai_api_key", { api_key: apiKey });
+        await invoke("save_zai_api_key", { apiKey });
         setAuthResult({ success: true, message: "Z.AI API key saved." });
         setLastError(null);
       } catch (err) {
