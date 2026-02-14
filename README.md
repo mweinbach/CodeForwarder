@@ -89,3 +89,10 @@ To skip this step (CI/offline builds), set `SKIP_CLI_PROXY_SYNC=1`.
 - [Development](docs/DEVELOPMENT.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
+
+## Releases & Auto-Updates
+
+- The app uses the Tauri updater plugin and checks GitHub Releases metadata at:
+  - `https://github.com/mweinbach/vibeproxy-win-rs/releases/latest/download/latest.json`
+- Release builds (including updater signatures and macOS notarization) run automatically when pushing a tag like `v0.1.4`.
+- `scripts/release.mjs` bumps versions, creates the tag and GitHub release; the CI tag trigger does the rest.

@@ -1496,3 +1496,10 @@ select:focus {
     padding-left: 0;
   }
 }
+
+.button-row {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  align-items: center;
+}

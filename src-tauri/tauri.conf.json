@@ -32,6 +32,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -49,8 +50,8 @@
       "endpoints": [
         "https://github.com/mweinbach/vibeproxy-win-rs/releases/latest/download/latest.json"
       ],
-      "dialog": true,
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUzMDE3NjdDN0NDQkI2QUUKUldTdXRzdDhmSFlCVTVHM1lyTGpienl2SEpLd29iU3pWQkUyS2FkVk5ScUNiLzlBM1M1elZBVjkK"
+      "dialog": false,
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM2RTZDMzdFOUE2M0I0QTQKUldTa3RHT2Fmc1BtTmh6bVNiRGFiQ2JTcDRBMVVVYVpvc1FtVVhRbEViUWh2eTlNLzdaUUU2ckMK"
     }
   }
 }

@@ -14,7 +14,19 @@ const FILES = {
 
 function run(cmd, { silent = false } = {}) {
   try {
-    return execSync(cmd, { encoding: "utf8", stdio: silent ? "pipe" : "inherit" }).trim();
+    const output = execSync(cmd, {
+      encoding: "utf8",
+      stdio: silent ? "pipe" : "inherit",
+    });
+
+    // When stdio is "inherit", Node returns null even if the command succeeds.
+    if (typeof output === "string") {
+      return output.trim();
+    }
+    if (output === null || output === undefined) {
+      return "";
+    }
+    return String(output).trim();
   } catch (err) {
     if (!silent) console.error(`Command failed: ${cmd}`);
     throw err;
@@ -100,16 +112,19 @@ function main() {
   console.log("Pushing to remote...");
   run("git push origin main --tags");
 
-  console.log("Creating GitHub release...");
+  console.log("Creating GitHub release (if missing)...");
   const releaseNotes = notes || `Release ${tag}`;
-  run(`gh release create ${tag} --title "VibeProxy ${tag}" --notes "${releaseNotes}"`);
+  try {
+    runSilent(`gh release view ${tag}`);
+    console.log(`GitHub release ${tag} already exists, updating title/notes.`);
+    run(`gh release edit ${tag} --title "VibeProxy ${tag}" --notes "${releaseNotes}"`);
+  } catch {
+    run(`gh release create ${tag} --title "VibeProxy ${tag}" --notes "${releaseNotes}"`);
+  }
 
-  console.log("Triggering build workflows...");
-  run(`gh workflow run "Build macOS (Tauri)" -f ref=${tag} -f release_tag=${tag}`);
-  run(`gh workflow run "Build Windows (Tauri)" -f ref=${tag} -f release_tag=${tag}`);
-  run(`gh workflow run "Build Linux (Tauri)" -f ref=${tag} -f release_tag=${tag}`);
+  console.log("Release workflows will run automatically on tag push (v*).");
 
-  console.log(`\nDone! Release ${tag} created and builds triggered.`);
+  console.log(`\nDone! Release ${tag} created. CI will build and upload artifacts for this tag.`);
   console.log(`https://github.com/mweinbach/vibeproxy-win-rs/releases/tag/${tag}\n`);
 }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { relaunch } from "@tauri-apps/plugin-process";
 import {
   LayoutDashboard, 
   Cloud, 
@@ -28,6 +29,7 @@ import TitleBar from "./TitleBar";
 import UsageDashboard from "./UsageDashboard";
 import ModelsTab from "./ModelsTab";
 import AgentsTab from "./AgentsTab";
+import { useUpdater } from "../hooks/useUpdater";
 
 import glyphLight from "../assets/icons/light/glyph.png";
 import iconAntigravityLight from "../assets/icons/light/icon-antigravity.png";
@@ -190,6 +192,14 @@ export default function SettingsView() {
     lastError: settingsError,
     clearLastError: clearSettingsError,
   } = useSettings();
+  const {
+    status: updateStatus,
+    lastCheckedAt: updateLastCheckedAt,
+    availableVersion,
+    progressPercent,
+    lastError: updateError,
+    checkForUpdates,
+  } = useUpdater();
 
   const [showQwenDialog, setShowQwenDialog] = useState(false);
   const [showZaiDialog, setShowZaiDialog] = useState(false);
@@ -205,6 +215,27 @@ export default function SettingsView() {
     clearLastError: clearUsageError,
   } = useUsageDashboard(activeTab === "usage");
   const operationalError = serverError ?? settingsError ?? accountsError;
+
+  const updateStatusLabel = (() => {
+    if (updateStatus === "checking") return "Checking...";
+    if (updateStatus === "downloading") {
+      if (progressPercent !== null) return `Downloading (${progressPercent}%)...`;
+      return "Downloading...";
+    }
+    if (updateStatus === "ready_to_restart") return "Update ready. Restart to apply.";
+    if (updateStatus === "up_to_date") return "Up to date.";
+    if (updateStatus === "error") return "Update failed.";
+    return "Idle.";
+  })();
+
+  const updateCheckedAtLabel = (() => {
+    if (!updateLastCheckedAt) return "Never checked.";
+    try {
+      return `Last checked: ${new Date(updateLastCheckedAt).toLocaleString()}`;
+    } catch {
+      return "Last checked: unknown";
+    }
+  })();
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -494,6 +525,36 @@ export default function SettingsView() {
               Desktop behavior and local file access.
             </p>
             <section className="settings-section">
+              <div className="setting-row">
+                <div className="setting-label">
+                  <span>App updates</span>
+                  <small>
+                    {updateStatusLabel}{" "}
+                    {availableVersion ? `Available: ${availableVersion}.` : ""}
+                    {updateStatus === "error" && updateError ? ` ${updateError}` : ""}
+                  </small>
+                  <small>{updateCheckedAtLabel}</small>
+                </div>
+                <div className="button-row">
+                  {updateStatus === "ready_to_restart" ? (
+                    <button
+                      className="btn btn-sm"
+                      type="button"
+                      onClick={() => relaunch()}
+                    >
+                      Restart to apply
+                    </button>
+                  ) : null}
+                  <button
+                    className="btn btn-sm"
+                    type="button"
+                    onClick={() => checkForUpdates({ manual: true })}
+                    disabled={updateStatus === "checking" || updateStatus === "downloading"}
+                  >
+                    Check for updates
+                  </button>
+                </div>
+              </div>
               <div className="setting-row">
                 <div className="setting-label">
                   <span>Launch at login</span>
