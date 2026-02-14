@@ -24,7 +24,7 @@
     "store:default",
     "autostart:default",
     "process:default",
-    "process:allow-relaunch",
+    "process:allow-restart",
     "updater:default",
     "updater:allow-check",
     "updater:allow-download-and-install"
