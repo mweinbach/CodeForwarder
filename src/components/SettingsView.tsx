@@ -31,7 +31,6 @@ import ModelsTab from "./ModelsTab";
 import AgentsTab from "./AgentsTab";
 import { useUpdater } from "../hooks/useUpdater";
 
-import glyphLight from "../assets/icons/light/glyph.png";
 import iconAntigravityLight from "../assets/icons/light/icon-antigravity.png";
 import iconClaudeLight from "../assets/icons/light/icon-claude.png";
 import iconCodexLight from "../assets/icons/light/icon-codex.png";
@@ -40,7 +39,6 @@ import iconCopilotLight from "../assets/icons/light/icon-copilot.png";
 import iconQwenLight from "../assets/icons/light/icon-qwen.png";
 import iconZaiLight from "../assets/icons/light/icon-zai.png";
 
-import glyphDark from "../assets/icons/dark/glyph.png";
 import iconAntigravityDark from "../assets/icons/dark/icon-antigravity.png";
 import iconClaudeDark from "../assets/icons/dark/icon-claude.png";
 import iconCodexDark from "../assets/icons/dark/icon-codex.png";
@@ -128,11 +126,6 @@ const SERVICE_ICON_MAP: Record<ThemeMode, Record<ServiceType, string>> = {
     qwen: iconQwenDark,
     zai: iconZaiDark,
   },
-};
-
-const GLYPH_MAP: Record<ThemeMode, string> = {
-  light: glyphLight,
-  dark: glyphDark,
 };
 
 function isTauriRuntime(): boolean {
@@ -344,7 +337,6 @@ export default function SettingsView() {
       {shouldShowCustomTitleBar() ? <TitleBar /> : null}
       <aside className="sidebar" data-tauri-drag-region>
         <div className="sidebar-header" data-tauri-drag-region>
-          <img src={GLYPH_MAP[themeMode]} alt="CodeForwarder" className="app-hero-icon" />
           <div>
             <p className="sidebar-eyebrow">Control Center</p>
             <span className="sidebar-title">CodeForwarder</span>

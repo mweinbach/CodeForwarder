@@ -205,13 +205,6 @@ html[data-platform="macos"] .sidebar {
   border-bottom: 1px solid var(--border);
 }
 
-.app-hero-icon {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  opacity: 0.9;
-}
-
 .sidebar-title {
   font-size: 15px;
   font-weight: 600;
