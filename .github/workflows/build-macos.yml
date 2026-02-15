@@ -111,6 +111,31 @@ jobs:
         run: |
           bun run tauri build --ci -t "${{ matrix.target }}" --runner cargo
 
+      - name: Rename updater artifacts (macOS)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(python3 -c 'import json; print(json.load(open("src-tauri/tauri.conf.json"))["version"])')"
+          ARCH="x86_64"
+          if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
+            ARCH="aarch64"
+          fi
+
+          BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+          SRC="$BUNDLE_DIR/VibeProxy.app.tar.gz"
+          SRC_SIG="$SRC.sig"
+          DST="$BUNDLE_DIR/VibeProxy_${VERSION}_${ARCH}.app.tar.gz"
+          DST_SIG="$DST.sig"
+
+          if [ ! -f "$SRC" ] || [ ! -f "$SRC_SIG" ]; then
+            echo "Expected updater artifacts not found in $BUNDLE_DIR"
+            ls -la "$BUNDLE_DIR"
+            exit 1
+          fi
+
+          mv "$SRC" "$DST"
+          mv "$SRC_SIG" "$DST_SIG"
+
       - name: Notarize and staple (DMG)
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}

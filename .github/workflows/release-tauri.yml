@@ -148,6 +148,32 @@ jobs:
         run: |
           bun run tauri build --ci -t "${{ matrix.target }}"
 
+      - name: Rename updater artifacts (macOS)
+        if: matrix.kind == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          ARCH="x86_64"
+          if [ "${{ matrix.target }}" = "aarch64-apple-darwin" ]; then
+            ARCH="aarch64"
+          fi
+
+          BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/macos"
+          SRC="$BUNDLE_DIR/VibeProxy.app.tar.gz"
+          SRC_SIG="$SRC.sig"
+          DST="$BUNDLE_DIR/VibeProxy_${VERSION}_${ARCH}.app.tar.gz"
+          DST_SIG="$DST.sig"
+
+          if [ ! -f "$SRC" ] || [ ! -f "$SRC_SIG" ]; then
+            echo "Expected updater artifacts not found in $BUNDLE_DIR"
+            ls -la "$BUNDLE_DIR"
+            exit 1
+          fi
+
+          mv "$SRC" "$DST"
+          mv "$SRC_SIG" "$DST_SIG"
+
       - name: Notarize and staple (macOS DMG)
         if: matrix.kind == 'macos'
         env:
@@ -278,15 +304,15 @@ jobs:
           }
 
           # Notes:
-          # - macOS: app.tar.gz
-          # - Windows: setup.nsis.zip
-          # - Linux: AppImage.tar.gz
+          # - macOS: VibeProxy_${VERSION}_${ARCH}.app.tar.gz (renamed per-arch in this workflow)
+          # - Windows: NSIS installer exe
+          # - Linux: AppImage
           # If any are missing, fail so updates don't break silently.
-          MAC_ARM="$(mk_entry \".*(aarch64|arm64).*\\\\.app\\\\.tar\\\\.gz$\")"
-          MAC_X64="$(mk_entry \".*(x64|x86_64|amd64).*\\\\.app\\\\.tar\\\\.gz$\")"
-          WIN_X64="$(mk_entry \".*(x64|x86_64|amd64).*\\\\.nsis\\\\.zip$\")"
-          WIN_ARM="$(mk_entry \".*(arm64|aarch64).*\\\\.nsis\\\\.zip$\")"
-          LINUX_X64="$(mk_entry \".*(amd64|x86_64).*\\\\.AppImage\\\\.tar\\\\.gz$\")"
+          MAC_ARM="$(mk_entry \".*_aarch64\\\\.app\\\\.tar\\\\.gz$\")"
+          MAC_X64="$(mk_entry \".*_x86_64\\\\.app\\\\.tar\\\\.gz$\")"
+          WIN_X64="$(mk_entry \".*_x64-setup\\\\.exe$\")"
+          WIN_ARM="$(mk_entry \".*_arm64-setup\\\\.exe$\")"
+          LINUX_X64="$(mk_entry \".*(amd64|x86_64).*\\\\.AppImage$\")"
 
           jq -n \
             --arg version "$VERSION" \
