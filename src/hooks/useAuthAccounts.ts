@@ -80,28 +80,33 @@ export function useAuthAccounts() {
   const deleteAccount = useCallback(
     async (filePath: string) => {
       try {
-        await invoke("delete_auth_account", { filePath });
+        // Support both `filePath` (camelCase) and `file_path` (snake_case).
+        // Tauri command arg name mapping differs across versions/config.
+        await invoke("delete_auth_account", { filePath, file_path: filePath });
+        await fetchAccounts();
         setLastError(null);
       } catch (err) {
         console.error("Failed to delete account:", err);
         setLastError(toErrorMessage(err, "Failed to delete account"));
       }
     },
-    [],
+    [fetchAccounts],
   );
 
   const saveZaiKey = useCallback(
     async (apiKey: string) => {
       try {
-        await invoke("save_zai_api_key", { apiKey });
+        // Support both `apiKey` (camelCase) and `api_key` (snake_case).
+        await invoke("save_zai_api_key", { apiKey, api_key: apiKey });
         setAuthResult({ success: true, message: "Z.AI API key saved." });
+        await fetchAccounts();
         setLastError(null);
       } catch (err) {
         console.error("Failed to save ZAI key:", err);
         setLastError(toErrorMessage(err, "Failed to save Z.AI API key"));
       }
     },
-    [],
+    [fetchAccounts],
   );
 
   return {

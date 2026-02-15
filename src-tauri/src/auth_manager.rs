@@ -133,10 +133,14 @@ pub fn scan_auth_directory() -> HashMap<ServiceType, ServiceAccounts> {
 }
 
 pub fn delete_account(file_path: &str) -> Result<(), String> {
-    let auth_dir = fs::canonicalize(get_auth_dir())
+    let target = Path::new(file_path);
+    delete_account_impl(&get_auth_dir(), target)
+}
+
+fn delete_account_impl(auth_dir: &Path, target: &Path) -> Result<(), String> {
+    let auth_dir = fs::canonicalize(auth_dir)
         .map_err(|e| format!("Failed to resolve auth directory: {}", e))?;
 
-    let target = Path::new(file_path);
     if target.extension().and_then(|ext| ext.to_str()) != Some("json") {
         return Err("Only .json auth files can be deleted".to_string());
     }
@@ -148,5 +152,112 @@ pub fn delete_account(file_path: &str) -> Result<(), String> {
         return Err("Refusing to delete files outside auth directory".to_string());
     }
 
-    fs::remove_file(&canonical_target).map_err(|e| format!("Failed to delete account file: {}", e))
+    match fs::remove_file(&canonical_target) {
+        Ok(()) => Ok(()),
+        Err(err) => {
+            // Windows refuses to delete read-only files. Clear the attribute and retry once.
+            // On Unix this is generally unnecessary but harmless if we can set permissions.
+            if err.kind() == std::io::ErrorKind::PermissionDenied {
+                if let Ok(meta) = fs::metadata(&canonical_target) {
+                    let mut perms = meta.permissions();
+                    if perms.readonly() {
+                        perms.set_readonly(false);
+                        let _ = fs::set_permissions(&canonical_target, perms);
+                        if fs::remove_file(&canonical_target).is_ok() {
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+
+            Err(format!("Failed to delete account file: {}", err))
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn make_temp_auth_dir() -> (PathBuf, PathBuf) {
+        let base = std::env::temp_dir().join(format!(
+            "codeforwarder-auth-manager-test-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let auth_dir = base.join(".cli-proxy-api");
+        fs::create_dir_all(&auth_dir).expect("Failed to create temp auth dir");
+        (base, auth_dir)
+    }
+
+    #[test]
+    fn delete_account_removes_auth_json_file() {
+        let (base, auth_dir) = make_temp_auth_dir();
+        let file_path = auth_dir.join("test.json");
+        fs::write(&file_path, "{}").expect("Failed to write auth file");
+
+        delete_account_impl(&auth_dir, &file_path).expect("delete_account failed");
+        assert!(!file_path.exists(), "auth file should be deleted");
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn delete_account_refuses_outside_auth_dir() {
+        let (base, auth_dir) = make_temp_auth_dir();
+        let outside = base.join("outside.json");
+        fs::write(&outside, "{}").expect("Failed to write outside file");
+
+        let err = delete_account_impl(&auth_dir, &outside).unwrap_err();
+        assert!(
+            err.contains("outside auth directory"),
+            "unexpected error: {}",
+            err
+        );
+
+        // Ensure we didn't delete it by mistake.
+        assert!(outside.exists(), "outside file should not be deleted");
+
+        // Sanity: still inside auth dir should be allowed.
+        let inside = auth_dir.join("inside.json");
+        fs::write(&inside, "{}").expect("Failed to write inside file");
+        delete_account_impl(&auth_dir, &inside).expect("delete_account failed for inside");
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn delete_account_rejects_non_json_extension() {
+        let (base, auth_dir) = make_temp_auth_dir();
+        let file_path = auth_dir.join("not-json.txt");
+        fs::write(&file_path, "hello").expect("Failed to write non-json file");
+
+        let err = delete_account_impl(&auth_dir, &file_path).unwrap_err();
+        assert!(err.contains("Only .json"), "unexpected error: {}", err);
+
+        assert!(file_path.exists(), "non-json file should remain");
+
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn delete_account_clears_readonly_and_deletes() {
+        let (base, auth_dir) = make_temp_auth_dir();
+        let file_path = auth_dir.join("readonly.json");
+        fs::write(&file_path, "{}").expect("Failed to write auth file");
+
+        let mut perms = fs::metadata(&file_path)
+            .expect("Failed to stat auth file")
+            .permissions();
+        perms.set_readonly(true);
+        fs::set_permissions(&file_path, perms).expect("Failed to set readonly");
+
+        // On Unix, deletion succeeds even when the file is readonly; on Windows we rely on the
+        // fallback path in delete_account to clear the attribute first.
+        delete_account_impl(&auth_dir, &file_path).expect("delete_account failed");
+        assert!(!file_path.exists(), "readonly auth file should be deleted");
+
+        let _ = fs::remove_dir_all(&base);
+    }
 }

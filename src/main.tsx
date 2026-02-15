@@ -41,7 +41,11 @@ function syncFavicon() {
 
 async function syncNativeIcons() {
   try {
-    await invoke("sync_theme_icons", { isDark: mediaQuery.matches });
+    // Support both `isDark` (camelCase) and `is_dark` (snake_case).
+    await invoke("sync_theme_icons", {
+      isDark: mediaQuery.matches,
+      is_dark: mediaQuery.matches,
+    });
   } catch {
     // Ignore when running as a plain web app without a Tauri backend.
   }

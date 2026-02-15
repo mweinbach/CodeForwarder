@@ -61,7 +61,8 @@ export function useSettings() {
         };
       });
       try {
-        await invoke("set_vercel_config", { enabled, apiKey });
+        // Support both `apiKey` (camelCase) and `api_key` (snake_case).
+        await invoke("set_vercel_config", { enabled, apiKey, api_key: apiKey });
         setLastError(null);
       } catch (err) {
         console.error("Failed to set Vercel config:", err);
