@@ -1,10 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Bot, RefreshCw } from "lucide-react";
+import { Bot, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react";
 import type { ProviderModelDefinitionsResponse, ProviderModelInfo, AgentInstallResult } from "../types";
 import { toErrorMessage } from "../utils/error";
 import AgentModelInstallDialog from "./AgentModelInstallDialog";
 import TabHeader from "./TabHeader";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { Card, CardContent, CardHeader } from "./ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
 
 const PROVIDER_CHANNELS: Array<{ key: string; label: string }> = [
   { key: "claude", label: "Claude" },
@@ -108,47 +120,53 @@ export default function ModelsTab() {
   }, [allModels, query.search]);
 
   return (
-    <div className="tab-content animate-in flex flex-col gap-6 pb-6">
+    <div className="flex flex-col gap-6 pb-6 animate-in">
       <TabHeader
         title="Models"
         subtitle="Browse runtime model catalogs and install selections into Custom Models."
       />
 
       {installState.lastInstallResult ? (
-        <div className="auth-result-banner success rounded-md border border-[color:var(--ok)]/25" role="status" aria-live="polite">
-          <p className="auth-result-message">
+        <Alert className="border-green-500/50 text-green-700 dark:text-green-400">
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertTitle>Success</AlertTitle>
+          <AlertDescription>
             Installed for {installState.lastInstallResult.agent_key}: added {installState.lastInstallResult.added}, skipped {installState.lastInstallResult.skipped_duplicates} duplicates.
-          </p>
-        </div>
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       {dataState.lastError ? (
-        <div className="auth-result-banner error rounded-md border border-[color:var(--danger)]/20" role="alert">
-          <p className="auth-result-message">{dataState.lastError}</p>
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{dataState.lastError}</AlertDescription>
+        </Alert>
       ) : null}
 
-      <section className="settings-section">
-        <div className="models-toolbar flex flex-wrap items-end gap-3">
-          <label className="models-field min-w-[180px] flex-1">
-            <span className="models-label">Provider</span>
-            <select
-              value={query.channel}
-              onChange={(e) =>
-                setQuery((prev) => ({ ...prev, channel: e.target.value }))
-              }
-            >
-              {PROVIDER_CHANNELS.map((opt) => (
-                <option key={opt.key} value={opt.key}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="flex-1 min-w-[200px] flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Provider</label>
+              <select
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                value={query.channel}
+                onChange={(e) =>
+                  setQuery((prev) => ({ ...prev, channel: e.target.value }))
+                }
+              >
+                {PROVIDER_CHANNELS.map((opt) => (
+                  <option key={opt.key} value={opt.key} className="bg-background text-foreground">
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-          <label className="models-field min-w-[220px] flex-[2]">
-              <span className="models-label">Search</span>
-              <input
+            <div className="flex-[2] min-w-[200px] flex flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Search</label>
+              <Input
                 type="text"
                 value={query.search}
                 onChange={(e) =>
@@ -156,78 +174,79 @@ export default function ModelsTab() {
                 }
                 placeholder="Filter models..."
               />
-            </label>
+            </div>
 
-          <div className="models-actions inline-flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={() =>
-                setInstallState((prev) => ({ ...prev, showInstallDialog: true }))
-              }
-              disabled={dataState.isLoading}
-            >
-              <Bot size={14} />
-              Add to Custom Models
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={refresh}
-              disabled={dataState.isLoading}
-            >
-              <RefreshCw size={14} className={dataState.isLoading ? "spin" : ""} />
-              Refresh
-            </button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() =>
+                  setInstallState((prev) => ({ ...prev, showInstallDialog: true }))
+                }
+                disabled={dataState.isLoading}
+              >
+                <Bot className="mr-2 h-4 w-4" />
+                Add to Custom Models
+              </Button>
+              <Button
+                variant="outline"
+                onClick={refresh}
+                disabled={dataState.isLoading}
+              >
+                <RefreshCw className={`mr-2 h-4 w-4 ${dataState.isLoading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
           </div>
-        </div>
+        </CardHeader>
 
-        <div className="stats-grid grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <div className="stat-item">
-            <span className="stat-label">Available</span>
-            <span className="stat-value">{allModels.length}</span>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 mb-6">
+            <div className="flex flex-col gap-1 rounded-lg border bg-card p-3 shadow-sm">
+              <span className="text-xs font-medium text-muted-foreground">Available</span>
+              <span className="text-2xl font-bold tabular-nums">{allModels.length}</span>
+            </div>
+            <div className="flex flex-col gap-1 rounded-lg border bg-card p-3 shadow-sm">
+              <span className="text-xs font-medium text-muted-foreground">Visible</span>
+              <span className="text-2xl font-bold tabular-nums">{filteredModels.length}</span>
+            </div>
+            <div className="flex flex-col gap-1 rounded-lg border bg-card p-3 shadow-sm">
+              <span className="text-xs font-medium text-muted-foreground">Reasoning-ready</span>
+              <span className="text-2xl font-bold tabular-nums">{thinkingReadyCount}</span>
+            </div>
           </div>
-          <div className="stat-item">
-            <span className="stat-label">Visible</span>
-            <span className="stat-value">{filteredModels.length}</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-label">Reasoning-ready</span>
-            <span className="stat-value">{thinkingReadyCount}</span>
-          </div>
-        </div>
 
-        <div className="usage-table-wrap model-table-wrap overflow-auto rounded-md border border-[color:var(--border)]">
-          <table className="usage-table">
-            <thead>
-              <tr>
-                <th>Model</th>
-                <th>Thinking</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredModels.map((m) => (
-                <tr key={m.id}>
-                  <td>
-                    <div className="model-cell flex flex-col gap-0.5">
-                      <div className="model-primary font-semibold text-[color:var(--text-primary)]">{m.id}</div>
-                      {m.display_name ? <div className="model-secondary text-xs text-[color:var(--text-muted)]">{m.display_name}</div> : null}
-                    </div>
-                  </td>
-                  <td className="model-secondary text-xs text-[color:var(--text-muted)]">{formatThinkingSummary(m)}</td>
-                </tr>
-              ))}
-              {filteredModels.length === 0 ? (
-                <tr>
-                    <td colSpan={2} className="model-secondary text-xs text-[color:var(--text-muted)]">
+          <div className="rounded-md border max-h-[500px] overflow-auto overscroll-none">
+            <Table>
+              <TableHeader className="bg-muted/50 sticky top-0">
+                <TableRow>
+                  <TableHead>Model</TableHead>
+                  <TableHead>Thinking</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredModels.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="font-semibold">{m.id}</span>
+                        {m.display_name ? <span className="text-xs text-muted-foreground">{m.display_name}</span> : null}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">{formatThinkingSummary(m)}</TableCell>
+                  </TableRow>
+                ))}
+                {filteredModels.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-center text-muted-foreground h-24">
                       {dataState.isLoading ? "Loading..." : "No models found."}
-                    </td>
-                  </tr>
+                    </TableCell>
+                  </TableRow>
                 ) : null}
-            </tbody>
-          </table>
-        </div>
-      </section>
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
       <AgentModelInstallDialog
         isOpen={installState.showInstallDialog}
@@ -240,7 +259,6 @@ export default function ModelsTab() {
         }
         onInstalled={(result) => {
           setInstallState((prev) => ({ ...prev, lastInstallResult: result }));
-          // Refresh list after install so user can keep browsing.
           refresh();
         }}
       />

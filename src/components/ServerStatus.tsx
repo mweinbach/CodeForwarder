@@ -1,4 +1,6 @@
 import { Download, Play, Square } from "lucide-react";
+import { Button } from "./ui/button";
+import { Progress } from "./ui/progress";
 
 interface ServerStatusProps {
   isRunning: boolean;
@@ -23,35 +25,31 @@ export default function ServerStatus({
 
   if (!binaryAvailable) {
     return (
-      <div className="server-status flex flex-wrap items-center justify-between gap-4">
-        <div className="status-copy flex min-w-0 flex-1 flex-col gap-1">
-          <span className="status-label text-sm font-semibold">Proxy engine</span>
-          <p className="status-caption text-sm text-[color:var(--text-secondary)]">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-sm font-semibold">Proxy engine</span>
+          <p className="text-sm text-muted-foreground">
             No runtime detected yet. Download the latest CLIProxyAPIPlus binary.
           </p>
-          <p className="status-subhint text-xs text-[color:var(--text-muted)]">
+          <p className="text-xs text-muted-foreground opacity-80">
             If this build includes a bundled runtime, it will be detected automatically.
           </p>
         </div>
-        <div className="status-right inline-flex items-center">
+        <div className="inline-flex items-center">
           {binaryDownloading ? (
-            <div className="download-progress flex w-40 flex-col gap-1.5">
-              <progress
-                className="download-progress-bar h-1.5 w-full overflow-hidden rounded-full border-0 bg-[color:var(--track)]"
-                value={downloadProgress ?? undefined}
-                max={100}
-              />
-              <span className="progress-text text-right text-xs text-[color:var(--text-muted)]">
+            <div className="flex w-40 flex-col gap-2">
+              <Progress value={downloadProgress ?? 0} className="h-1.5 w-full" />
+              <span className="text-right text-xs text-muted-foreground font-medium">
                 {downloadProgress != null
                   ? `${Math.round(downloadProgress)}% complete`
                   : "Downloading..."}
               </span>
             </div>
           ) : (
-            <button className="btn btn-primary" onClick={onDownloadBinary}>
-              <Download size={14} />
+            <Button onClick={onDownloadBinary}>
+              <Download className="mr-2 h-4 w-4" />
               Download Runtime
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -59,22 +57,23 @@ export default function ServerStatus({
   }
 
   return (
-    <div className="server-status flex flex-wrap items-center justify-between gap-4">
-      <div className="status-copy flex min-w-0 flex-1 flex-col gap-1">
-        <span className="status-label text-sm font-semibold">Proxy engine</span>
-        <p className="status-caption text-sm text-[color:var(--text-secondary)]">{readyCaption}</p>
-        <p className="status-subhint text-xs text-[color:var(--text-muted)]">
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="text-sm font-semibold">Proxy engine</span>
+        <p className="text-sm text-muted-foreground">{readyCaption}</p>
+        <p className="text-xs text-muted-foreground opacity-80">
           Built-in runtime support is enabled for packaged builds.
         </p>
       </div>
-      <div className="status-right inline-flex items-center">
-        <button
-          className={`btn btn-status min-w-[136px] ${isRunning ? "is-running" : "is-stopped"}`}
+      <div className="inline-flex items-center">
+        <Button
+          variant={isRunning ? "destructive" : "default"}
+          className={`min-w-[136px] ${isRunning ? "bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-400 dark:hover:bg-emerald-500/20" : ""}`}
           onClick={onStartStop}
         >
-          {isRunning ? <Square size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}
+          {isRunning ? <Square className="mr-2 h-4 w-4" fill="currentColor" /> : <Play className="mr-2 h-4 w-4" fill="currentColor" />}
           <span>{isRunning ? "Stop Server" : "Start Server"}</span>
-        </button>
+        </Button>
       </div>
     </div>
   );

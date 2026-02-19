@@ -1,9 +1,19 @@
 import { useEffect, useState } from "react";
-import type { KeyboardEvent, MouseEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Pencil, Save, X } from "lucide-react";
+import { Pencil, Save, X, AlertCircle } from "lucide-react";
 import type { FactoryCustomModelRow } from "../types";
 import { toErrorMessage } from "../utils/error";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Checkbox } from "./ui/checkbox";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 
 interface CustomModelEditDialogProps {
   isOpen: boolean;
@@ -54,23 +64,6 @@ export default function CustomModelEditDialog({
 
   const canEdit = model.isProxy;
 
-  const handleOverlayMouseDown = (event: MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
-      onClose();
-    }
-  };
-
-  const handleOverlayKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (
-      event.key === "Escape" ||
-      event.key === "Enter" ||
-      event.key === " "
-    ) {
-      event.preventDefault();
-      onClose();
-    }
-  };
-
   const handleSave = async () => {
     if (!canEdit) return;
     setIsSaving(true);
@@ -94,134 +87,119 @@ export default function CustomModelEditDialog({
   };
 
   return (
-    <div
-      className="modal-overlay fixed inset-0 z-[1000] flex items-center justify-center bg-[color:var(--overlay)] p-4 backdrop-blur-[4px]"
-      role="button"
-      tabIndex={0}
-      aria-label="Close dialog"
-      onMouseDown={handleOverlayMouseDown}
-      onKeyDown={handleOverlayKeyDown}
-    >
-      <div className="modal-content modal-content-wide w-full max-w-[960px] max-h-[85vh] overflow-auto rounded-2xl border border-[color:var(--border)] bg-[color:var(--bg-1)] p-5">
-        <h3 className="modal-title text-base font-semibold">Edit Custom Model</h3>
-        <p className="modal-subtitle mt-1.5 text-sm text-[color:var(--text-secondary)]">
-          {canEdit
-            ? "Edits apply to proxy models only (localhost:8317)."
-            : "This model is not using the local proxy, so it is view-only."}
-        </p>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[960px] max-h-[90vh] overflow-y-auto overscroll-none">
+        <DialogHeader>
+          <DialogTitle>Edit Custom Model</DialogTitle>
+          <DialogDescription>
+            {canEdit
+              ? "Edits apply to proxy models only (localhost:8317)."
+              : "This model is not using the local proxy, so it is view-only."}
+          </DialogDescription>
+        </DialogHeader>
 
         {lastError ? (
-          <div className="auth-result-banner error mt-4 rounded-md border border-[color:var(--danger)]/20" role="alert">
-            <p className="auth-result-message">{lastError}</p>
-          </div>
+          <Alert variant="destructive" className="mt-2">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{lastError}</AlertDescription>
+          </Alert>
         ) : null}
 
-        <div className="agent-model-grid mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <section className="agent-model-pane border-t border-[color:var(--border)] pt-3">
-            <div className="agent-model-pane-head mb-2 flex items-center justify-between gap-2">
-              <div className="agent-model-pane-title flex flex-col gap-0.5">
-                <strong>Details</strong>
-                <span className="agent-model-pane-meta text-xs text-[color:var(--text-muted)]">ID: {model.id}</span>
-              </div>
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 mt-4">
+          <div className="flex flex-col gap-4 rounded-lg border p-4 bg-card shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-semibold text-sm">Details</span>
+              <span className="text-xs text-muted-foreground">ID: {model.id}</span>
             </div>
 
-            <div className="agent-model-options flex flex-col gap-2">
-              <label className="agent-model-field flex flex-col gap-1">
-                <span className="agent-model-label">Display name</span>
-                <input
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Display name</label>
+                <Input
                   type="text"
                   value={form.displayName}
                   onChange={(e) => setForm((prev) => ({ ...prev, displayName: e.target.value }))}
                   disabled={!canEdit}
                 />
-              </label>
+              </div>
 
-              <label className="agent-model-field flex flex-col gap-1">
-                <span className="agent-model-label">Model</span>
-                <input
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Model</label>
+                <Input
                   type="text"
                   value={form.modelId}
                   onChange={(e) => setForm((prev) => ({ ...prev, modelId: e.target.value }))}
                   disabled={!canEdit}
                 />
-              </label>
+              </div>
 
-              <label className="agent-model-field flex flex-col gap-1">
-                <span className="agent-model-label">Provider</span>
-                <input
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Provider</label>
+                <Input
                   type="text"
                   value={form.provider}
                   onChange={(e) => setForm((prev) => ({ ...prev, provider: e.target.value }))}
                   disabled={!canEdit}
                 />
-              </label>
+              </div>
 
-              <label className="agent-model-field flex flex-col gap-1">
-                <span className="agent-model-label">Base URL</span>
-                <input
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs font-medium text-muted-foreground">Base URL</label>
+                <Input
                   type="text"
                   value={form.baseUrl}
                   onChange={(e) => setForm((prev) => ({ ...prev, baseUrl: e.target.value }))}
                   disabled={!canEdit}
                 />
-              </label>
+              </div>
 
-              <label className="checkbox-row inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+              <div className="flex items-center gap-2 mt-2">
+                <Checkbox
+                  id="mark-no-image"
                   checked={form.noImageSupport}
-                  onChange={(e) => setForm((prev) => ({ ...prev, noImageSupport: e.target.checked }))}
+                  onCheckedChange={(checked) => setForm((prev) => ({ ...prev, noImageSupport: checked === true }))}
                   disabled={!canEdit}
                 />
-                Mark as no image support
-              </label>
+                <label htmlFor="mark-no-image" className="text-sm font-medium cursor-pointer">
+                  Mark as no image support
+                </label>
+              </div>
 
               {model.isSessionDefault ? (
-                <div className="agent-model-hint text-xs text-[color:var(--text-muted)]">
+                <div className="text-xs text-muted-foreground mt-2">
                   This is your Factory session default model.
                 </div>
               ) : null}
             </div>
-          </section>
+          </div>
 
-          <section className="agent-model-pane border-t border-[color:var(--border)] pt-3">
-            <div className="agent-model-pane-head mb-2 flex items-center justify-between gap-2">
-              <div className="agent-model-pane-title flex flex-col gap-0.5">
-                <strong>Actions</strong>
-                <span className="agent-model-pane-meta text-xs text-[color:var(--text-muted)]">Index: {model.index ?? "-"}</span>
-              </div>
+          <div className="flex flex-col gap-4 rounded-lg border p-4 bg-card shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="font-semibold text-sm">Actions</span>
+              <span className="text-xs text-muted-foreground">Index: {model.index ?? "-"}</span>
             </div>
 
-            <div className="agent-model-options flex flex-col gap-2">
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={onClose}
-                disabled={isSaving}
-              >
-                <X size={14} />
+            <div className="flex flex-col gap-3">
+              <Button variant="outline" onClick={onClose} disabled={isSaving} className="w-full justify-start">
+                <X className="mr-2 h-4 w-4" />
                 Close
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-primary"
-                onClick={handleSave}
-                disabled={!canEdit || isSaving}
-              >
-                <Save size={14} />
+              </Button>
+              <Button onClick={handleSave} disabled={!canEdit || isSaving} className="w-full justify-start">
+                <Save className="mr-2 h-4 w-4" />
                 Save
-              </button>
+              </Button>
 
               {!canEdit ? (
-                <div className="agent-model-hint inline-flex items-center gap-1.5 text-xs text-[color:var(--text-muted)]">
-                  <Pencil size={14} />
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mt-4">
+                  <Pencil className="h-4 w-4" />
                   Editing is disabled for non-proxy models.
                 </div>
               ) : null}
             </div>
-          </section>
+          </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

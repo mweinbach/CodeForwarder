@@ -1,4 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
+import { Save } from "lucide-react";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Switch } from "./ui/switch";
 
 interface VercelGatewayControlsProps {
   enabled: boolean;
@@ -11,75 +15,56 @@ export default function VercelGatewayControls({
   apiKey,
   onSave,
 }: VercelGatewayControlsProps) {
-  const [draftKey, setDraftKey] = useState("");
-  const [isDirty, setIsDirty] = useState(false);
-  const [showingSaved, setShowingSaved] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  const localKey = isDirty ? draftKey : apiKey;
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) {
-        clearTimeout(timerRef.current);
-      }
-    };
-  }, []);
-
-  const handleToggle = (checked: boolean) => {
-    onSave(checked, localKey);
-    if (!checked) {
-      setDraftKey("");
-      setIsDirty(false);
-    }
-  };
-
-  const handleSave = () => {
-    onSave(enabled, localKey);
-    setShowingSaved(true);
-    setDraftKey("");
-    setIsDirty(false);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => setShowingSaved(false), 1500);
-  };
+  const [localEnabled, setLocalEnabled] = useState(enabled);
+  const [localApiKey, setLocalApiKey] = useState(apiKey);
+  const hasChanges = localEnabled !== enabled || localApiKey !== apiKey;
 
   return (
-    <div className="vercel-controls mt-3 border-t border-[color:var(--border)] pt-3">
-      <label className="checkbox-row inline-flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={enabled}
-          onChange={(e) => handleToggle(e.target.checked)}
+    <div className="flex flex-col gap-4 rounded-md border border-border bg-card p-4 shadow-sm">
+      <div className="flex flex-col gap-1.5">
+        <h4 className="text-sm font-semibold text-card-foreground">Vercel Gateway Integration</h4>
+        <p className="text-xs text-muted-foreground">
+          Route Claude requests through Claude Code (Vercel) if connected.
+        </p>
+      </div>
+
+      <div className="flex items-center justify-between gap-4">
+        <label className="text-sm font-medium text-foreground cursor-pointer flex-1" htmlFor="vercel-gateway-toggle">
+          Enable Vercel Routing
+        </label>
+        <Switch
+          id="vercel-gateway-toggle"
+          checked={localEnabled}
+          onCheckedChange={setLocalEnabled}
         />
-        <span>Use Vercel AI Gateway</span>
-      </label>
-      {enabled && (
-        <div className="vercel-key-row mt-2 grid grid-cols-[1fr_auto] items-center gap-2">
-          <span className="vercel-key-label col-span-full text-xs text-[color:var(--text-muted)]">Vercel API key</span>
-          <input
-            type="password"
-            className="vercel-key-input"
-            placeholder="vercel_ai_xxxxx"
-            value={localKey}
-            onChange={(e) => {
-              setDraftKey(e.target.value);
-              setIsDirty(true);
-            }}
-          />
-          {showingSaved ? (
-            <span className="saved-text text-xs font-medium text-[color:var(--ok)]">Saved</span>
-          ) : (
-            <button
-              className="btn btn-sm"
-              type="button"
-              disabled={localKey.trim() === ""}
-              onClick={handleSave}
-            >
-              Save
-            </button>
-          )}
-        </div>
-      )}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider" htmlFor="vercel-api-key">
+          Global API Key
+        </label>
+        <Input
+          id="vercel-api-key"
+          type="password"
+          placeholder="sk-ant-..."
+          value={localApiKey}
+          onChange={(e) => setLocalApiKey(e.target.value)}
+        />
+        <p className="text-[11px] text-muted-foreground mt-0.5">
+          Leave blank to use default per-account keys.
+        </p>
+      </div>
+
+      <div className="flex justify-end pt-2">
+        <Button
+          size="sm"
+          onClick={() => onSave(localEnabled, localApiKey.trim())}
+          disabled={!hasChanges}
+        >
+          <Save className="mr-2 h-4 w-4" />
+          Save Changes
+        </Button>
+      </div>
     </div>
   );
 }

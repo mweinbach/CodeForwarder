@@ -1,7 +1,29 @@
 import type { KeyboardEvent, MouseEvent } from "react";
 import type { ProviderModelInfo } from "../types";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Checkbox } from "./ui/checkbox";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { AlertCircle } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
 
 interface AgentModelInstallDialogViewProps {
+  isOpen: boolean;
   agentLabel: string;
   channel: string;
   search: string;
@@ -51,6 +73,7 @@ const PROVIDER_CHANNELS: Array<{ key: string; label: string }> = [
 ];
 
 export function renderAgentModelInstallDialogView({
+  isOpen,
   agentLabel,
   channel,
   search,
@@ -85,244 +108,243 @@ export function renderAgentModelInstallDialogView({
   onBaseUrlChange,
   onDisplayPrefixChange,
   onNoImageSupportChange,
-  onOverlayMouseDown,
-  onOverlayKeyDown,
   formatThinkingSummary,
 }: AgentModelInstallDialogViewProps) {
   return (
-    <div
-      className="modal-overlay fixed inset-0 z-[1000] flex items-center justify-center bg-[color:var(--overlay)] p-4 backdrop-blur-[4px]"
-      role="button"
-      tabIndex={0}
-      aria-label="Close dialog"
-      onMouseDown={onOverlayMouseDown}
-      onKeyDown={onOverlayKeyDown}
-    >
-      <div className="modal-content modal-content-wide w-full max-w-[960px] max-h-[85vh] overflow-auto rounded-2xl border border-[color:var(--border)] bg-[color:var(--bg-1)] p-5">
-        <h3 className="modal-title text-base font-semibold">Add Models to {agentLabel}</h3>
-        <p className="modal-subtitle mt-1.5 text-sm text-[color:var(--text-secondary)]">
-          Pick a provider catalog, select models, and choose reasoning variants to install into
-          Factory custom models.
-        </p>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-[960px] max-h-[90vh] overflow-y-auto overscroll-none">
+        <DialogHeader>
+          <DialogTitle>Add Models to {agentLabel}</DialogTitle>
+          <DialogDescription>
+            Pick a provider catalog, select models, and choose reasoning variants to install into
+            Factory custom models.
+          </DialogDescription>
+        </DialogHeader>
 
         {lastError ? (
-          <div className="auth-result-banner error mt-4 rounded-md border border-[color:var(--danger)]/20" role="alert">
-            <p className="auth-result-message">{lastError}</p>
-          </div>
+          <Alert variant="destructive">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Error</AlertTitle>
+            <AlertDescription>{lastError}</AlertDescription>
+          </Alert>
         ) : null}
 
-        <div className="agent-model-controls mt-4 flex flex-wrap items-end gap-3">
-          <label className="agent-model-field flex min-w-[180px] flex-col gap-1">
-            <span className="agent-model-label">Provider</span>
+        <div className="flex flex-wrap items-end gap-4 py-2">
+          <div className="flex-1 min-w-[200px] flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Provider</label>
             <select
               value={channel}
               onChange={(e) => onChannelChange(e.target.value)}
-              className="agent-model-select"
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
             >
               {PROVIDER_CHANNELS.map((opt) => (
-                <option key={opt.key} value={opt.key}>
+                <option key={opt.key} value={opt.key} className="bg-background text-foreground">
                   {opt.label}
                 </option>
               ))}
             </select>
-          </label>
-          <label className="agent-model-field flex min-w-[240px] flex-1 flex-col gap-1">
-            <span className="agent-model-label">Search</span>
-            <input
+          </div>
+          <div className="flex-[2] min-w-[240px] flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Search</label>
+            <Input
               type="text"
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Filter models..."
             />
-          </label>
+          </div>
         </div>
 
-        <div className="agent-model-grid mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <section className="agent-model-pane border-t border-[color:var(--border)] pt-3">
-            <div className="agent-model-pane-head mb-2 flex items-center justify-between gap-2">
-              <div className="agent-model-pane-title flex flex-col gap-0.5">
-                <strong>Models</strong>
-                <span className="agent-model-pane-meta text-xs text-[color:var(--text-muted)]">
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 mt-2">
+          <div className="flex flex-col gap-2 rounded-lg border p-4 bg-card shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex flex-col gap-0.5">
+                <span className="font-semibold text-sm">Models</span>
+                <span className="text-xs text-muted-foreground">
                   {isLoading ? "Loading..." : `${filteredModels.length} shown / ${allModelsCount} total`}
                 </span>
               </div>
-              <label className="checkbox-row inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+              <div className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  id="select-all-models"
                   checked={
                     filteredModels.length > 0 &&
                     filteredModels.every((m) => selectedIds.has(m.id))
                   }
-                  onChange={(e) => onSetAllVisible(e.target.checked)}
+                  onCheckedChange={(checked) => onSetAllVisible(checked === true)}
                 />
-                Select visible
-              </label>
+                <label htmlFor="select-all-models" className="cursor-pointer font-medium">Select visible</label>
+              </div>
             </div>
 
-            <div className="usage-table-wrap model-table-wrap overflow-auto rounded-md border border-[color:var(--border)]">
-              <table className="usage-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 44 }}>Add</th>
-                    <th>Model</th>
-                    <th>Thinking</th>
-                  </tr>
-                </thead>
-                <tbody>
+            <div className="rounded-md border max-h-[360px] overflow-auto overscroll-none">
+              <Table>
+                <TableHeader className="bg-muted/50 sticky top-0">
+                  <TableRow>
+                    <TableHead className="w-[44px]">Add</TableHead>
+                    <TableHead>Model</TableHead>
+                    <TableHead>Thinking</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {filteredModels.map((m) => (
-                    <tr key={m.id}>
-                      <td>
-                        <input
-                          type="checkbox"
+                    <TableRow key={m.id}>
+                      <TableCell>
+                        <Checkbox
                           checked={selectedIds.has(m.id)}
-                          onChange={() => onToggleSelected(m.id)}
+                          onCheckedChange={() => onToggleSelected(m.id)}
                         />
-                      </td>
-                      <td>
-                        <div className="model-cell flex flex-col gap-0.5">
-                          <div className="model-primary font-semibold text-[color:var(--text-primary)]">
-                            {m.id}
-                          </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-0.5">
+                          <span className="font-semibold">{m.id}</span>
                           {m.display_name ? (
-                            <div className="model-secondary text-xs text-[color:var(--text-muted)]">
+                            <span className="text-xs text-muted-foreground">
                               {m.display_name}
-                            </div>
+                            </span>
                           ) : null}
                         </div>
-                      </td>
-                      <td className="model-secondary text-xs text-[color:var(--text-muted)]">
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
                         {formatThinkingSummary(m)}
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                  {filteredModels.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-center text-muted-foreground h-24">
+                        {isLoading ? "Loading..." : "No models found."}
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </TableBody>
+              </Table>
             </div>
-          </section>
+          </div>
 
-          <section className="agent-model-pane border-t border-[color:var(--border)] pt-3">
-            <div className="agent-model-pane-head mb-2 flex items-center justify-between gap-2">
-              <div className="agent-model-pane-title flex flex-col gap-0.5">
-                <strong>Install Options</strong>
-                <span className="agent-model-pane-meta text-xs text-[color:var(--text-muted)]">
-                  {previewCount} variants
+          <div className="flex flex-col gap-2 rounded-lg border p-4 bg-card shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex flex-col gap-0.5">
+                <span className="font-semibold text-sm">Install Options</span>
+                <span className="text-xs text-muted-foreground">
+                  {previewCount} variants will be created
                 </span>
               </div>
             </div>
 
-            <div className="agent-model-options flex flex-col gap-2">
-              <label className="checkbox-row inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2 text-sm">
+                <Checkbox
+                  id="include-base-model"
                   checked={includeBase}
-                  onChange={(e) => onIncludeBaseChange(e.target.checked)}
+                  onCheckedChange={(checked) => onIncludeBaseChange(checked === true)}
                 />
-                Include base model
-              </label>
+                <label htmlFor="include-base-model" className="cursor-pointer font-medium">Include base model</label>
+              </div>
 
-              <div className="agent-model-section border-t border-[color:var(--border)] pt-2.5">
-                <div className="agent-model-section-title text-sm font-medium text-[color:var(--text-secondary)]">
-                  Reasoning levels
-                </div>
-                <div className={`agent-model-chiprow mt-1 flex flex-wrap gap-1.5 ${levelsDisabled ? "is-disabled opacity-60" : ""}`}>
+              <div className="flex flex-col gap-2 border-t pt-3">
+                <span className="text-sm font-medium text-muted-foreground">Reasoning levels</span>
+                <div className={`flex flex-wrap gap-2 ${levelsDisabled ? "opacity-60 grayscale-[0.2]" : ""}`}>
                   {unionLevels.length === 0 ? (
-                    <span className="empty-note text-sm text-[color:var(--text-muted)]">
+                    <span className="text-sm text-muted-foreground">
                       Select a model with level-based reasoning.
                     </span>
                   ) : (
                     unionLevels.map((level) => (
-                      <label key={level} className="chip-check inline-flex items-center gap-1.5 text-sm">
-                        <input
-                          type="checkbox"
+                      <div key={level} className="flex items-center gap-2 text-sm">
+                        <Checkbox
+                          id={`level-${level}`}
                           checked={selectedLevels.has(level)}
-                          onChange={(e) => onToggleLevel(level, e.target.checked)}
+                          onCheckedChange={(checked) => onToggleLevel(level, checked === true)}
                         />
-                        <span>{level}</span>
-                      </label>
+                        <label htmlFor={`level-${level}`} className="cursor-pointer font-medium">{level}</label>
+                      </div>
                     ))
                   )}
                 </div>
               </div>
 
-              <div className="agent-model-section border-t border-[color:var(--border)] pt-2.5">
-                <div className="agent-model-section-title text-sm font-medium text-[color:var(--text-secondary)]">
-                  Thinking budgets
-                </div>
-                <input
+              <div className="flex flex-col gap-2 border-t pt-3">
+                <span className="text-sm font-medium text-muted-foreground">Thinking budgets</span>
+                <Input
                   type="text"
                   value={budgetCsv}
                   onChange={(e) => onBudgetCsvChange(e.target.value)}
                   disabled={budgetsDisabled}
                   placeholder="e.g. 4000, 10000, 32000"
                 />
-                <div className="agent-model-hint text-xs text-[color:var(--text-muted)]">
+                <span className="text-xs text-muted-foreground">
                   Budgets above ~32000 will be clamped by CodeForwarder.
-                </div>
+                </span>
               </div>
 
-              <div className="agent-model-section border-t border-[color:var(--border)] pt-2.5">
-                <div className="agent-model-section-title text-sm font-medium text-[color:var(--text-secondary)]">
-                  Factory mapping
-                </div>
-                <label className="agent-model-inline grid grid-cols-[90px_1fr] items-center gap-2">
-                  <span className="text-xs text-[color:var(--text-muted)]">Provider</span>
+              <div className="flex flex-col gap-3 border-t pt-3">
+                <span className="text-sm font-medium text-muted-foreground">Factory mapping</span>
+                
+                <div className="grid grid-cols-[100px_1fr] items-center gap-3">
+                  <span className="text-xs text-muted-foreground font-medium">Provider</span>
                   <select
                     value={factoryProvider}
                     onChange={(e) => onFactoryProviderChange(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   >
-                    <option value="anthropic">anthropic</option>
-                    <option value="openai">openai</option>
+                    <option value="anthropic" className="bg-background text-foreground">anthropic</option>
+                    <option value="openai" className="bg-background text-foreground">openai</option>
                   </select>
-                </label>
-                <label className="agent-model-inline grid grid-cols-[90px_1fr] items-center gap-2">
-                  <span className="text-xs text-[color:var(--text-muted)]">Base URL</span>
-                  <input
-                    type="text"
-                    value={baseUrl}
-                    onChange={(e) => onBaseUrlChange(e.target.value)}
-                  />
-                </label>
-                {!isProxyBaseUrl ? (
-                  <div className="agent-model-hint text-xs text-[color:var(--text-muted)]">
-                    Only proxy URLs on localhost:8317 are supported.
+                </div>
+                
+                <div className="grid grid-cols-[100px_1fr] items-center gap-3">
+                  <span className="text-xs text-muted-foreground font-medium">Base URL</span>
+                  <div className="flex flex-col gap-1 w-full">
+                    <Input
+                      type="text"
+                      value={baseUrl}
+                      onChange={(e) => onBaseUrlChange(e.target.value)}
+                      className={!isProxyBaseUrl ? "border-destructive focus-visible:ring-destructive" : ""}
+                    />
+                    {!isProxyBaseUrl ? (
+                      <span className="text-xs text-destructive">
+                        Only proxy URLs on localhost:8317 are supported.
+                      </span>
+                    ) : null}
                   </div>
-                ) : null}
-                <label className="agent-model-inline grid grid-cols-[90px_1fr] items-center gap-2">
-                  <span className="text-xs text-[color:var(--text-muted)]">Name prefix</span>
-                  <input
+                </div>
+
+                <div className="grid grid-cols-[100px_1fr] items-center gap-3">
+                  <span className="text-xs text-muted-foreground font-medium">Name prefix</span>
+                  <Input
                     type="text"
                     value={displayPrefix}
                     onChange={(e) => onDisplayPrefixChange(e.target.value)}
                     placeholder={`${agentLabel}: `}
                   />
-                </label>
-                <label className="checkbox-row inline-flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
+                </div>
+                
+                <div className="flex items-center gap-2 text-sm mt-1">
+                  <Checkbox
+                    id="no-image-support"
                     checked={noImageSupport}
-                    onChange={(e) => onNoImageSupportChange(e.target.checked)}
+                    onCheckedChange={(checked) => onNoImageSupportChange(checked === true)}
                   />
-                  Mark as no image support
-                </label>
+                  <label htmlFor="no-image-support" className="cursor-pointer font-medium">Mark as no image support</label>
+                </div>
               </div>
             </div>
-          </section>
+          </div>
         </div>
 
-        <div className="modal-buttons mt-4 flex justify-end gap-2">
-          <button type="button" className="btn btn-cancel" onClick={onClose}>
+        <DialogFooter className="mt-4">
+          <Button variant="outline" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
+          </Button>
+          <Button
             disabled={!canInstall || isLoading}
             onClick={onInstall}
           >
             Install
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

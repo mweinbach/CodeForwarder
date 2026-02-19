@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react";
+import { Button } from "./ui/button";
 import type { AuthAccount } from "../types";
 
 interface AccountRowProps {
@@ -23,19 +24,19 @@ export default function AccountRow({
   };
 
   return (
-    <div className={`account-row flex items-center gap-2 py-2 ${account.is_expired ? "is-expired opacity-60" : ""}`}>
+    <div className={`flex items-center gap-3 py-2 rounded-md hover:bg-muted/30 px-2 transition-colors ${account.is_expired ? "opacity-70 grayscale-[0.2]" : ""}`}>
       <span
-        className={`account-dot h-1.5 w-1.5 shrink-0 rounded-full ${account.is_expired ? "expired" : "active"}`}
+        className={`h-2 w-2 shrink-0 rounded-full ${account.is_expired ? "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"}`}
       />
-      <span className="account-name flex-1 truncate text-sm" title={account.display_name}>
+      <span className="flex-1 truncate text-sm font-medium" title={account.display_name}>
         {account.display_name}
       </span>
       {account.is_expired && (
-        <span className="expired-badge text-xs font-medium text-[color:var(--warn)]">(expired)</span>
+        <span className="text-xs font-semibold tracking-wide uppercase text-amber-600 dark:text-amber-500">(expired)</span>
       )}
-      <button type="button" className="btn-remove inline-flex items-center p-0 text-xs font-medium text-[color:var(--danger)] opacity-70 transition hover:opacity-100" onClick={handleRemove} title="Remove account">
-        <Trash2 size={12} />
-      </button>
+      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={handleRemove} title="Remove account">
+        <Trash2 className="h-4 w-4" />
+      </Button>
     </div>
   );
 }

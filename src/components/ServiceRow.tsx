@@ -3,6 +3,9 @@ import { Plus, ChevronDown, ChevronUp } from "lucide-react";
 import type { ServiceType, AuthAccount } from "../types";
 import { SERVICE_DISPLAY_NAMES } from "../types";
 import AccountRow from "./AccountRow";
+import { Button } from "./ui/button";
+import { Switch } from "./ui/switch";
+import { Badge } from "./ui/badge";
 
 interface ServiceRowProps {
   serviceType: ServiceType;
@@ -42,66 +45,67 @@ export default function ServiceRow({
   }, [accounts]);
 
   return (
-    <div className={`service-row py-3.5 ${isEnabled ? "" : "is-disabled opacity-60"}`}>
-      <div className="service-header flex items-center gap-3">
-        <label className="toggle-switch" aria-label={`Enable ${displayName}`}>
-          <input
-            type="checkbox"
-            checked={isEnabled}
-            onChange={(e) => onToggleEnabled(e.target.checked)}
-          />
-          <span className="toggle-slider" />
-        </label>
-        <img src={icon} alt={displayName} className="service-icon h-6 w-6 rounded-md object-contain" />
-        <span className="service-name text-sm font-semibold">{displayName}</span>
-        <div className="service-spacer flex-1" />
+    <div className={`py-4 ${isEnabled ? "" : "opacity-60 grayscale-[0.2]"}`}>
+      <div className="flex items-center gap-3">
+        <Switch
+          checked={isEnabled}
+          onCheckedChange={onToggleEnabled}
+          aria-label={`Enable ${displayName}`}
+        />
+        <img src={icon} alt={displayName} className="h-6 w-6 rounded-md object-contain" />
+        <span className="text-sm font-semibold">{displayName}</span>
+        <div className="flex-1" />
         {isAuthenticating ? (
           <span className="spinner" />
         ) : isEnabled ? (
-          <button type="button" className="btn btn-sm" onClick={onConnect}>
-            <Plus size={14} />
+          <Button type="button" size="sm" variant="outline" onClick={onConnect}>
+            <Plus className="h-4 w-4 mr-1.5" />
             Add
-          </button>
+          </Button>
         ) : (
-          <span className="service-disabled-pill rounded-full bg-[color:var(--surface-soft)] px-2.5 py-1 text-xs text-[color:var(--text-muted)]">Disabled</span>
+          <Badge variant="secondary" className="px-2.5 py-0.5 text-xs font-normal">
+            Disabled
+          </Badge>
         )}
       </div>
 
       {isEnabled && (
-        <div className="service-accounts mt-3 pl-9">
+        <div className="mt-4 pl-12">
           {accounts.length > 0 ? (
             <>
               <button
                 type="button"
-                className="accounts-summary flex w-full items-center gap-2"
+                className="flex w-full items-center gap-2 hover:bg-muted/50 p-2 -ml-2 rounded-md transition-colors"
                 onClick={() => setIsExpanded(!isExpanded)}
               >
-                <span className="accounts-summary-main flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="accounts-count text-sm font-medium">
+                <span className="flex min-w-0 flex-1 flex-col gap-1 items-start text-left">
+                  <span className="text-sm font-medium">
                     {accounts.length} connected account
                     {accounts.length === 1 ? "" : "s"}
                   </span>
-                  <span className="accounts-pills inline-flex items-center gap-1.5">
-                    <span className="count-pill active rounded-full px-2 py-0.5 text-xs font-medium">{activeCount} active</span>
+                  <span className="inline-flex items-center gap-2">
+                    <Badge variant="default" className="bg-emerald-500/15 text-emerald-700 hover:bg-emerald-500/25 dark:bg-emerald-500/10 dark:text-emerald-400 font-medium px-2 py-0">
+                      {activeCount} active
+                    </Badge>
                     {expiredCount > 0 && (
-                      <span className="count-pill expired rounded-full px-2 py-0.5 text-xs font-medium">
+                      <Badge variant="destructive" className="bg-amber-500/15 text-amber-700 hover:bg-amber-500/25 dark:bg-amber-500/10 dark:text-amber-400 font-medium px-2 py-0">
                         {expiredCount} expired
-                      </span>
+                      </Badge>
                     )}
                   </span>
                 </span>
                 {accounts.length > 1 && (
-                  <span className="accounts-note text-xs text-[color:var(--text-muted)]">
+                  <span className="text-xs text-muted-foreground hidden sm:block">
                     Round-robin w/ auto-failover
                   </span>
                 )}
-                <span className="chevron-icon text-[color:var(--text-muted)]">
-                  {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                <span className="text-muted-foreground">
+                  {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </span>
               </button>
 
               {isExpanded && (
-                <div className="accounts-list mt-2 flex flex-col gap-1.5">
+                <div className="mt-3 flex flex-col gap-2">
                   {accounts.map((account) => (
                     <AccountRow
                       key={account.id}
@@ -114,10 +118,10 @@ export default function ServiceRow({
               )}
             </>
           ) : (
-            <div className="no-accounts py-2 text-sm text-[color:var(--text-muted)]">No connected accounts yet.</div>
+            <div className="py-2 text-sm text-muted-foreground">No connected accounts yet.</div>
           )}
 
-          {children ? <div className="service-extra mt-3">{children}</div> : null}
+          {children ? <div className="mt-4 pt-4 border-t border-border/50">{children}</div> : null}
         </div>
       )}
     </div>

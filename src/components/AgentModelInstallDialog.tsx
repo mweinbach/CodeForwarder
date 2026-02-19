@@ -331,8 +331,6 @@ function useAgentModelInstallDialog({
     return count;
   }, [budgets.length, includeBase, selectedLevels, selectedModels]);
 
-  if (!isOpen) return null;
-
   const toggleSelected = (id: string) => {
     setDialogState((prev) => {
       const next = new Set(prev.selectedIds);
@@ -476,6 +474,7 @@ function useAgentModelInstallDialog({
   };
 
   return renderAgentModelInstallDialogView({
+    isOpen,
     agentLabel,
     channel,
     search,

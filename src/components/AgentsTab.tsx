@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { Lock, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Lock, Pencil, Plus, RefreshCw, Trash2, CheckCircle2, AlertCircle } from "lucide-react";
 import type {
   AgentInstallResult,
   FactoryCustomModelsRemoveResult,
@@ -11,6 +11,19 @@ import { toErrorMessage } from "../utils/error";
 import AgentModelInstallDialog from "./AgentModelInstallDialog";
 import CustomModelEditDialog from "./CustomModelEditDialog";
 import TabHeader from "./TabHeader";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { Card, CardContent, CardHeader } from "./ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
+import { Checkbox } from "./ui/checkbox";
 
 const FACTORY_NAMESPACE_KEY = "codeforwarder";
 
@@ -40,24 +53,20 @@ function FeedbackBanners({
   return (
     <>
       {lastAddResult ? (
-        <div
-          className="auth-result-banner success rounded-md border border-[color:var(--ok)]/25"
-          role="status"
-          aria-live="polite"
-        >
-          <p className="auth-result-message">
+        <Alert className="border-green-500/50 text-green-700 dark:text-green-400 mb-6">
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertTitle>Success</AlertTitle>
+          <AlertDescription>
             Added {lastAddResult.added} (skipped {lastAddResult.skipped_duplicates} duplicates)
-          </p>
-        </div>
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       {lastRemoveResult ? (
-        <div
-          className="auth-result-banner success rounded-md border border-[color:var(--ok)]/25"
-          role="status"
-          aria-live="polite"
-        >
-          <p className="auth-result-message">
+        <Alert className="border-green-500/50 text-green-700 dark:text-green-400 mb-6">
+          <CheckCircle2 className="h-4 w-4" />
+          <AlertTitle>Success</AlertTitle>
+          <AlertDescription>
             Removed {lastRemoveResult.removed}.
             {lastRemoveResult.skippedNonProxy > 0
               ? ` Skipped ${lastRemoveResult.skippedNonProxy} non-proxy.`
@@ -65,164 +74,17 @@ function FeedbackBanners({
             {lastRemoveResult.skippedNotFound > 0
               ? ` ${lastRemoveResult.skippedNotFound} not found.`
               : ""}
-          </p>
-        </div>
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       {lastError ? (
-        <div
-          className="auth-result-banner error rounded-md border border-[color:var(--danger)]/20"
-          role="alert"
-        >
-          <p className="auth-result-message">{lastError}</p>
-        </div>
+        <Alert variant="destructive" className="mb-6">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{lastError}</AlertDescription>
+        </Alert>
       ) : null}
-    </>
-  );
-}
-
-interface ModelsTableProps {
-  filteredModels: FactoryCustomModelRow[];
-  allModelsCount: number;
-  selectedIds: Set<string>;
-  allVisibleSelected: boolean;
-  visibleRemovableIdsCount: number;
-  isLoading: boolean;
-  isBusy: boolean;
-  factorySettingsPath: string | null;
-  canEdit: (m: FactoryCustomModelRow) => boolean;
-  canRemove: (m: FactoryCustomModelRow) => boolean;
-  onToggleAllVisible: (checked: boolean) => void;
-  onToggleRow: (id: string) => void;
-  onEdit: (model: FactoryCustomModelRow) => void;
-  onRemoveOne: (id: string) => void;
-}
-
-function ModelsTable({
-  filteredModels,
-  allModelsCount,
-  selectedIds,
-  allVisibleSelected,
-  visibleRemovableIdsCount,
-  isLoading,
-  isBusy,
-  factorySettingsPath,
-  canEdit,
-  canRemove,
-  onToggleAllVisible,
-  onToggleRow,
-  onEdit,
-  onRemoveOne,
-}: ModelsTableProps) {
-  return (
-    <>
-      <div className="usage-table-wrap model-table-wrap overflow-auto rounded-md border border-[color:var(--border)]">
-        <table className="usage-table">
-          <thead>
-            <tr>
-              <th style={{ width: 44 }}>
-                <input
-                  type="checkbox"
-                  checked={allVisibleSelected}
-                  onChange={(e) => onToggleAllVisible(e.target.checked)}
-                  disabled={visibleRemovableIdsCount === 0}
-                />
-              </th>
-              <th>Model</th>
-              <th style={{ width: 120 }}>Provider</th>
-              <th>Base URL</th>
-              <th style={{ width: 110 }}>Type</th>
-              <th style={{ width: 170 }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredModels.map((m) => (
-              <tr key={m.id}>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.has(m.id)}
-                    onChange={() => onToggleRow(m.id)}
-                    disabled={!canRemove(m)}
-                  />
-                </td>
-                <td>
-                  <div className="model-cell flex flex-col gap-0.5">
-                    <div className="model-primary font-semibold text-[color:var(--text-primary)]">
-                      {m.displayName}
-                      {m.isSessionDefault ? (
-                        <span className="model-secondary text-xs text-[color:var(--text-muted)]">
-                          {" "}
-                          (default)
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="model-secondary text-xs text-[color:var(--text-muted)]">
-                      {m.model}
-                    </div>
-                    <div className="model-secondary text-xs text-[color:var(--text-muted)]">
-                      {m.id}
-                    </div>
-                  </div>
-                </td>
-                <td className="model-secondary text-xs text-[color:var(--text-muted)]">
-                  {m.provider}
-                </td>
-                <td className="model-secondary text-xs text-[color:var(--text-muted)]">
-                  {m.baseUrl}
-                </td>
-                <td className="model-secondary text-xs text-[color:var(--text-muted)]">
-                  {m.isProxy ? "proxy" : "external"}
-                </td>
-                <td>
-                  {m.isProxy ? (
-                    <div className="models-actions inline-flex flex-wrap items-center gap-2">
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        onClick={() => onEdit(m)}
-                        disabled={!canEdit(m)}
-                      >
-                        <Pencil size={14} />
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm"
-                        onClick={() => onRemoveOne(m.id)}
-                        disabled={isBusy || !canRemove(m)}
-                      >
-                        <Trash2 size={14} />
-                        Remove
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="model-secondary inline-flex items-center gap-1.5 text-xs text-[color:var(--text-muted)]">
-                      <Lock size={14} />
-                      view-only
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-            {filteredModels.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="model-secondary text-xs text-[color:var(--text-muted)]">
-                  {allModelsCount === 0
-                    ? "No custom models found."
-                    : isLoading
-                      ? "Loading..."
-                      : "No matches."}
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="agent-model-hint text-xs text-[color:var(--text-muted)]">
-        {factorySettingsPath ? `Factory: ${factorySettingsPath}` : ""}
-      </div>
     </>
   );
 }
@@ -345,7 +207,7 @@ export default function AgentsTab() {
   const externalCount = models.length - proxyCount;
 
   return (
-    <div className="tab-content animate-in flex flex-col gap-6 pb-6">
+    <div className="flex flex-col gap-6 pb-6 animate-in">
       <TabHeader
         title="Custom Models"
         subtitle="Manage Factory custom models powered by CodeForwarder."
@@ -357,78 +219,156 @@ export default function AgentsTab() {
         lastError={ui.lastError}
       />
 
-      <section className="settings-section">
-        <div className="stats-grid grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          <div className="stat-item">
-            <span className="stat-label">Total</span>
-            <span className="stat-value">{models.length}</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-label">Proxy</span>
-            <span className="stat-value">{proxyCount}</span>
-          </div>
-          <div className="stat-item">
-            <span className="stat-label">External</span>
-            <span className="stat-value">{externalCount}</span>
-          </div>
-        </div>
-
-        <div className="agent-card rounded-xl">
-          <div className="agent-card-body flex flex-col gap-3">
-            <div className="agent-actions inline-flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className="btn btn-sm btn-primary"
-                onClick={() => setUi((prev) => ({ ...prev, showInstallDialog: true }))}
-                disabled={ui.isBusy}
-              >
-                <Plus size={14} />
-                Add Models
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => removeModels(Array.from(ui.selectedIds))}
-                disabled={ui.isBusy || ui.selectedIds.size === 0}
-              >
-                <Trash2 size={14} />
-                Remove Selected
-              </button>
-              <button type="button" className="btn btn-sm" onClick={refresh} disabled={ui.isBusy}>
-                <RefreshCw size={14} className={ui.isLoading ? "spin" : ""} />
-                Refresh
-              </button>
-            </div>
-
-            <label className="agent-model-field flex min-w-[260px] flex-col gap-1">
-              <span className="agent-model-label">Search</span>
-              <input
+      <Card>
+        <CardHeader className="pb-4">
+          <div className="flex flex-col md:flex-row md:items-end gap-4 justify-between">
+            <div className="flex flex-1 min-w-[260px] flex-col gap-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Search</label>
+              <Input
                 type="text"
                 value={ui.search}
                 onChange={(e) => setUi((prev) => ({ ...prev, search: e.target.value }))}
                 placeholder="Filter by name, model id, provider, base URL..."
               />
-            </label>
-
-            <ModelsTable
-              filteredModels={filteredModels}
-              allModelsCount={models.length}
-              selectedIds={ui.selectedIds}
-              allVisibleSelected={allVisibleSelected}
-              visibleRemovableIdsCount={visibleRemovableIds.length}
-              isLoading={ui.isLoading}
-              isBusy={ui.isBusy}
-              factorySettingsPath={modelsState?.factorySettingsPath ?? null}
-              canEdit={canEdit}
-              canRemove={canRemove}
-              onToggleAllVisible={setAllVisibleSelected}
-              onToggleRow={toggleRowSelected}
-              onEdit={(model) => setUi((prev) => ({ ...prev, editingModel: model }))}
-              onRemoveOne={(id) => removeModels([id])}
-            />
+            </div>
+            
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                onClick={() => setUi((prev) => ({ ...prev, showInstallDialog: true }))}
+                disabled={ui.isBusy}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Models
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => removeModels(Array.from(ui.selectedIds))}
+                disabled={ui.isBusy || ui.selectedIds.size === 0}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Remove Selected
+              </Button>
+              <Button variant="outline" onClick={refresh} disabled={ui.isBusy}>
+                <RefreshCw className={`mr-2 h-4 w-4 ${ui.isLoading ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
           </div>
-        </div>
-      </section>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3 mb-6">
+            <div className="flex flex-col gap-1 rounded-lg border bg-card p-3 shadow-sm">
+              <span className="text-xs font-medium text-muted-foreground">Total</span>
+              <span className="text-2xl font-bold tabular-nums">{models.length}</span>
+            </div>
+            <div className="flex flex-col gap-1 rounded-lg border bg-card p-3 shadow-sm">
+              <span className="text-xs font-medium text-muted-foreground">Proxy</span>
+              <span className="text-2xl font-bold tabular-nums">{proxyCount}</span>
+            </div>
+            <div className="flex flex-col gap-1 rounded-lg border bg-card p-3 shadow-sm">
+              <span className="text-xs font-medium text-muted-foreground">External</span>
+              <span className="text-2xl font-bold tabular-nums">{externalCount}</span>
+            </div>
+          </div>
+
+          <div className="rounded-md border max-h-[500px] overflow-auto overscroll-none mb-2">
+            <Table>
+              <TableHeader className="bg-muted/50 sticky top-0">
+                <TableRow>
+                  <TableHead className="w-[44px]">
+                    <Checkbox
+                      checked={allVisibleSelected}
+                      onCheckedChange={(checked) => setAllVisibleSelected(checked === true)}
+                      disabled={visibleRemovableIds.length === 0}
+                    />
+                  </TableHead>
+                  <TableHead>Model</TableHead>
+                  <TableHead className="w-[120px]">Provider</TableHead>
+                  <TableHead>Base URL</TableHead>
+                  <TableHead className="w-[110px]">Type</TableHead>
+                  <TableHead className="w-[170px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredModels.map((m) => (
+                  <TableRow key={m.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={ui.selectedIds.has(m.id)}
+                        onCheckedChange={() => toggleRowSelected(m.id)}
+                        disabled={!canRemove(m)}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col gap-0.5">
+                        <div className="font-semibold text-foreground flex items-center gap-1">
+                          {m.displayName}
+                          {m.isSessionDefault ? (
+                            <span className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground">
+                              {" "}(default)
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="text-xs text-muted-foreground">{m.model}</div>
+                        <div className="text-[10px] text-muted-foreground opacity-70">{m.id}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{m.provider}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground max-w-[200px] truncate" title={m.baseUrl}>{m.baseUrl}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{m.isProxy ? "proxy" : "external"}</TableCell>
+                    <TableCell>
+                      {m.isProxy ? (
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => setUi((prev) => ({ ...prev, editingModel: m }))}
+                            disabled={!canEdit(m)}
+                          >
+                            <Pencil className="mr-1.5 h-3.5 w-3.5" />
+                            Edit
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                            onClick={() => removeModels([m.id])}
+                            disabled={ui.isBusy || !canRemove(m)}
+                          >
+                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                            Remove
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                          <Lock className="h-3.5 w-3.5" />
+                          view-only
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {filteredModels.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground h-24">
+                      {models.length === 0
+                        ? "No custom models found."
+                        : ui.isLoading
+                          ? "Loading..."
+                          : "No matches."}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
+              </TableBody>
+            </Table>
+          </div>
+          
+          <div className="text-xs text-muted-foreground text-right mt-2">
+            {modelsState?.factorySettingsPath ? `Factory: ${modelsState.factorySettingsPath}` : ""}
+          </div>
+        </CardContent>
+      </Card>
 
       <AgentModelInstallDialog
         isOpen={ui.showInstallDialog}

@@ -1,10 +1,22 @@
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, AlertCircle } from "lucide-react";
 import type {
   UsageDashboardPayload,
   UsageRange,
   UsageBreakdownRow,
 } from "../types";
 import TabHeader from "./TabHeader";
+import { Button } from "./ui/button";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "./ui/table";
+import { Progress } from "./ui/progress";
 
 interface UsageDashboardProps {
   dashboard: UsageDashboardPayload;
@@ -69,196 +81,212 @@ export default function UsageDashboard({
   );
 
   return (
-    <div className="usage-dashboard flex flex-col gap-5">
+    <div className="flex flex-col gap-6 pb-6 animate-in">
       <TabHeader
         title="Usage"
         subtitle="Track requests and token usage by provider, model, and account."
       />
 
       {error ? (
-        <div className="operation-error-banner flex items-center gap-3 rounded-md border border-[color:var(--danger)]/20" role="alert">
-          <p className="operation-error-message flex-1">{error}</p>
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={onDismissError}
-          >
-            Dismiss
-          </button>
-        </div>
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription className="flex items-center justify-between">
+            <span>{error}</span>
+            <Button size="sm" variant="outline" onClick={onDismissError}>
+              Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
       ) : null}
 
-      <section className="settings-section usage-controls">
-        <div className="usage-controls-row flex flex-wrap items-center justify-between gap-3">
-          <div className="usage-range-picker inline-flex flex-wrap items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[color:var(--surface-soft)] p-1">
-            {RANGE_OPTIONS.map((option) => (
-              <button
-                type="button"
-                key={option.value}
-                className={`range-pill rounded-full px-3 py-1.5 text-xs font-semibold transition ${range === option.value ? "active" : ""}`}
-                onClick={() => onRangeChange(option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            className="btn btn-sm usage-refresh-btn min-w-[112px]"
-            onClick={onRefresh}
-          >
-            <RefreshCw size={14} className={isLoading ? "spin" : ""} />
-            Refresh
-          </button>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/50 p-1">
+          {RANGE_OPTIONS.map((option) => (
+            <button
+              type="button"
+              key={option.value}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${range === option.value ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              onClick={() => onRangeChange(option.value)}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
-      </section>
-
-      <div className="usage-kpi-grid grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        <div className="stat-item">
-          <span className="stat-label">Total Tokens</span>
-          <span className="stat-value">
-            {formatNumber(usage.summary.total_tokens)}
-          </span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-label">Input</span>
-          <span className="stat-value">
-            {formatNumber(usage.summary.input_tokens)}
-          </span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-label">Output</span>
-          <span className="stat-value">
-            {formatNumber(usage.summary.output_tokens)}
-          </span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-label">Cached</span>
-          <span className="stat-value">
-            {formatNumber(usage.summary.cached_tokens)}
-          </span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-label">Reasoning</span>
-          <span className="stat-value">
-            {formatNumber(usage.summary.reasoning_tokens)}
-          </span>
-        </div>
-        <div className="stat-item">
-          <span className="stat-label">Error Rate</span>
-          <span className="stat-value">
-            {formatPercent(usage.summary.error_rate)}
-          </span>
-        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onRefresh}
+          disabled={isLoading}
+        >
+          <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
       </div>
 
-      <div className="usage-grid-two grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <section className="settings-section usage-insight-card usage-trend-card">
-          <h2 className="section-title">Token Trend</h2>
-          {usage.timeseries.length === 0 ? (
-            <p className="empty-note">No usage events yet for this range.</p>
-          ) : (
-            <div className="token-chart grid auto-cols-[minmax(24px,1fr)] grid-flow-col items-end gap-1.5 overflow-x-auto pt-2">
-              {usage.timeseries.map((point) => (
-                <div
-                  className="token-bar flex min-w-6 flex-col items-center gap-1.5"
-                  key={`${point.bucket}-${point.total_tokens}`}
-                >
-                  <div
-                    className="token-bar-fill w-full rounded-md bg-[color:var(--accent)] opacity-85"
-                    style={{
-                      height: `${Math.max(
-                        6,
-                        Math.round((point.total_tokens / maxPointTokens) * 100),
-                      )}%`,
-                    }}
-                    title={`${point.bucket}: ${formatNumber(point.total_tokens)} tokens`}
-                  />
-                  <span className="token-bar-label text-[10px] text-[color:var(--text-muted)]">{point.bucket}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-6">
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs font-medium uppercase tracking-wider">Total Tokens</CardDescription>
+            <CardTitle className="text-2xl font-bold tabular-nums">
+              {formatNumber(usage.summary.total_tokens)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs font-medium uppercase tracking-wider">Input</CardDescription>
+            <CardTitle className="text-2xl font-bold tabular-nums">
+              {formatNumber(usage.summary.input_tokens)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs font-medium uppercase tracking-wider">Output</CardDescription>
+            <CardTitle className="text-2xl font-bold tabular-nums">
+              {formatNumber(usage.summary.output_tokens)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs font-medium uppercase tracking-wider">Cached</CardDescription>
+            <CardTitle className="text-2xl font-bold tabular-nums">
+              {formatNumber(usage.summary.cached_tokens)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs font-medium uppercase tracking-wider">Reasoning</CardDescription>
+            <CardTitle className="text-2xl font-bold tabular-nums">
+              {formatNumber(usage.summary.reasoning_tokens)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        <Card>
+          <CardHeader className="p-4 pb-2">
+            <CardDescription className="text-xs font-medium uppercase tracking-wider">Error Rate</CardDescription>
+            <CardTitle className="text-2xl font-bold tabular-nums">
+              {formatPercent(usage.summary.error_rate)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+      </div>
 
-        <section className="settings-section usage-insight-card usage-provider-card">
-          <h2 className="section-title">Provider Share</h2>
-          {providerBreakdown.length === 0 ? (
-            <p className="empty-note">No provider usage yet.</p>
-          ) : (
-            <div className="provider-share-list flex flex-col gap-2.5">
-              {providerBreakdown.map((row) => (
-                <div className="provider-share-row flex flex-col gap-1.5" key={row.provider}>
-                  <div className="provider-share-label flex items-baseline justify-between gap-2 text-sm text-[color:var(--text-secondary)]">
-                    <span>{row.provider}</span>
-                    <span>
-                      {formatNumber(row.tokens)} tokens |{" "}
-                      {formatPercent(
-                        totalProviderTokens > 0
-                          ? (row.tokens / totalProviderTokens) * 100
-                          : 0,
-                      )}
-                    </span>
-                  </div>
-                  <div className="provider-share-track h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--track)]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Token Trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {usage.timeseries.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No usage events yet for this range.</p>
+            ) : (
+              <div className="flex h-[140px] items-end gap-1.5 pt-2">
+                {usage.timeseries.map((point) => (
+                  <div
+                    className="flex min-w-6 flex-1 flex-col items-center gap-1.5"
+                    key={`${point.bucket}-${point.total_tokens}`}
+                  >
                     <div
-                      className="provider-share-fill h-full rounded-full bg-[color:var(--accent)]"
+                      className="w-full rounded-t-sm bg-primary opacity-80 transition-all hover:opacity-100"
                       style={{
-                        width: `${Math.max(
-                          2,
-                          Math.round((row.tokens / maxProviderTokens) * 100),
+                        height: `${Math.max(
+                          4,
+                          Math.round((point.total_tokens / maxPointTokens) * 100),
                         )}%`,
                       }}
+                      title={`${point.bucket}: ${formatNumber(point.total_tokens)} tokens`}
                     />
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Provider Share</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {providerBreakdown.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No provider usage yet.</p>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {providerBreakdown.map((row) => (
+                  <div className="flex flex-col gap-2" key={row.provider}>
+                    <div className="flex items-baseline justify-between text-sm">
+                      <span className="font-medium">{row.provider}</span>
+                      <span className="text-muted-foreground text-xs">
+                        {formatNumber(row.tokens)} tokens ({formatPercent(
+                          totalProviderTokens > 0
+                            ? (row.tokens / totalProviderTokens) * 100
+                            : 0,
+                        )})
+                      </span>
+                    </div>
+                    <Progress
+                      value={(row.tokens / maxProviderTokens) * 100}
+                      className="h-2"
+                    />
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      <section className="settings-section usage-breakdown-section">
-        <h2 className="section-title">Detailed Breakdown</h2>
-        {usage.breakdown.length === 0 ? (
-          <p className="empty-note">No detailed usage data available yet.</p>
-        ) : (
-          <div className="usage-table-wrap overflow-auto rounded-md border border-[color:var(--border)]">
-            <table className="usage-table">
-              <thead>
-                <tr>
-                  <th>Provider</th>
-                  <th>Model</th>
-                  <th>Account</th>
-                  <th>Requests</th>
-                  <th>Tokens</th>
-                  <th>Cached</th>
-                  <th>Reasoning</th>
-                  <th>Last Seen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {usage.breakdown.map((row) => (
-                  <tr key={`${row.provider}-${row.model}-${row.account_key}`}>
-                    <td>{row.provider}</td>
-                    <td>{row.model}</td>
-                    <td>{row.account_label || row.account_key}</td>
-                    <td>{formatNumber(row.requests)}</td>
-                    <td>{formatNumber(row.total_tokens)}</td>
-                    <td>{formatNumber(row.cached_tokens)}</td>
-                    <td>{formatNumber(row.reasoning_tokens)}</td>
-                    <td>
-                      {row.last_seen
-                        ? new Date(row.last_seen).toLocaleString()
-                        : "-"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Detailed Breakdown</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {usage.breakdown.length === 0 ? (
+            <div className="p-6 text-sm text-muted-foreground">No detailed usage data available yet.</div>
+          ) : (
+            <div className="max-h-[400px] overflow-auto overscroll-none">
+              <Table>
+                <TableHeader className="bg-muted/50 sticky top-0">
+                  <TableRow>
+                    <TableHead>Provider</TableHead>
+                    <TableHead>Model</TableHead>
+                    <TableHead>Account</TableHead>
+                    <TableHead className="text-right">Requests</TableHead>
+                    <TableHead className="text-right">Tokens</TableHead>
+                    <TableHead className="text-right">Cached</TableHead>
+                    <TableHead className="text-right">Reasoning</TableHead>
+                    <TableHead>Last Seen</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {usage.breakdown.map((row) => (
+                    <TableRow key={`${row.provider}-${row.model}-${row.account_key}`}>
+                      <TableCell className="font-medium">{row.provider}</TableCell>
+                      <TableCell>{row.model}</TableCell>
+                      <TableCell className="max-w-[150px] truncate" title={row.account_label || row.account_key}>
+                        {row.account_label || row.account_key}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{formatNumber(row.requests)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatNumber(row.total_tokens)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">{formatNumber(row.cached_tokens)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-muted-foreground">{formatNumber(row.reasoning_tokens)}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {row.last_seen
+                          ? new Date(row.last_seen).toLocaleString()
+                          : "-"}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
