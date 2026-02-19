@@ -316,11 +316,11 @@ jobs:
           # - Windows: NSIS installer exe
           # - Linux: AppImage
           # If any are missing, fail so updates don't break silently.
-          MAC_ARM="$(mk_entry \".*_aarch64\\\\.app\\\\.tar\\\\.gz$\")"
-          MAC_X64="$(mk_entry \".*_x86_64\\\\.app\\\\.tar\\\\.gz$\")"
-          WIN_X64="$(mk_entry \".*_x64-setup\\\\.exe$\")"
-          WIN_ARM="$(mk_entry \".*_arm64-setup\\\\.exe$\")"
-          LINUX_X64="$(mk_entry \".*(amd64|x86_64).*\\\\.AppImage$\")"
+          MAC_ARM="$(mk_entry '.*_aarch64\.app\.tar\.gz$')"
+          MAC_X64="$(mk_entry '.*_x86_64\.app\.tar\.gz$')"
+          WIN_X64="$(mk_entry '.*_x64-setup\.exe$')"
+          WIN_ARM="$(mk_entry '.*_arm64-setup\.exe$')"
+          LINUX_X64="$(mk_entry '.*(amd64|x86_64).*\.AppImage$')"
 
           jq -n \
             --arg version "$VERSION" \
