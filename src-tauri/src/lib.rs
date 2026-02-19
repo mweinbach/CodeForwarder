@@ -143,6 +143,9 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 let _lifecycle_guard = startup_lifecycle_lock.lock().await;
 
+                // Always clear stale backend processes left behind by previous crashes/exits.
+                ServerManager::kill_orphaned_processes().await;
+
                 if binary_manager::is_binary_available_for_app(&auto_start_handle) {
                     log::info!("[Setup] Binary available, auto-starting server...");
 
@@ -345,6 +348,33 @@ pub fn run() {
                             }
                         }
                     }
+                });
+            });
+
+            // Handle quit from tray with explicit backend shutdown first.
+            let quit_handle = app_handle.clone();
+            let quit_sm = server_manager.clone();
+            let quit_tp = thinking_proxy.clone();
+            let quit_lifecycle_lock = lifecycle_lock.clone();
+            app.listen("tray_quit_clicked", move |_| {
+                let handle = quit_handle.clone();
+                let sm = quit_sm.clone();
+                let tp = quit_tp.clone();
+                let lifecycle_lock = quit_lifecycle_lock.clone();
+                tauri::async_runtime::spawn(async move {
+                    let _lifecycle_guard = lifecycle_lock.lock().await;
+
+                    {
+                        let mut tp = tp.write().await;
+                        tp.stop().await;
+                    }
+                    {
+                        let mut sm = sm.write().await;
+                        sm.stop().await;
+                    }
+                    ServerManager::kill_orphaned_processes().await;
+
+                    handle.exit(0);
                 });
             });
 

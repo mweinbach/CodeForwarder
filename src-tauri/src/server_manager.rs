@@ -11,6 +11,8 @@ use uuid::Uuid;
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+#[cfg(target_os = "windows")]
+const CLI_PROXY_IMAGE_NAME: &str = "cli-proxy-api-plus.exe";
 const PROXY_PORT: u16 = 8317;
 const BACKEND_PORT: u16 = 8318;
 
@@ -254,8 +256,16 @@ impl ServerManager {
         if let Some(mut child) = self.child.take() {
             self.add_log("Stopping server...").await;
 
+            #[cfg(target_os = "windows")]
+            let child_pid = child.id();
+
             // On Windows, child.kill() calls TerminateProcess.
             let _ = child.kill().await;
+
+            #[cfg(target_os = "windows")]
+            if let Some(pid) = child_pid {
+                kill_windows_pid_tree(pid).await;
+            }
 
             // Wait with a 2-second timeout
             let wait_result =
@@ -459,58 +469,49 @@ impl ServerManager {
     // -- orphaned process cleanup -------------------------------------------
 
     pub async fn kill_orphaned_processes() {
-        let Some(pid) = load_managed_pid() else {
-            return;
-        };
+        let managed_pid = load_managed_pid();
 
         #[cfg(target_os = "windows")]
         {
-            // Confirm this PID still matches the managed binary name before killing.
-            let mut tasklist = Command::new("tasklist");
-            apply_hidden_process_flags(&mut tasklist);
-            let pid_filter = format!("PID eq {}", pid);
-            let output = tasklist
-                .args([
-                    "/FI",
-                    &pid_filter,
-                    "/FI",
-                    "IMAGENAME eq cli-proxy-api-plus.exe",
-                    "/FO",
-                    "CSV",
-                    "/NH",
-                ])
-                .output()
-                .await;
+            if let Some(pid) = managed_pid {
+                // PID may have been recycled; only kill when the image name still matches.
+                let managed_image_matches = tasklist_image_name_for_pid(pid)
+                    .await
+                    .map(|image| image.eq_ignore_ascii_case(CLI_PROXY_IMAGE_NAME))
+                    .unwrap_or(false);
 
-            let Ok(output) = output else {
-                clear_managed_pid();
-                return;
-            };
+                if managed_image_matches {
+                    log::info!(
+                        "[ServerManager] Killing previously managed process PID={}",
+                        pid
+                    );
+                    kill_windows_pid_tree(pid).await;
+                }
 
-            let text = String::from_utf8_lossy(&output.stdout);
-            let has_match = text
-                .lines()
-                .any(|line| line.contains("cli-proxy-api-plus.exe"));
-            if !has_match {
                 clear_managed_pid();
-                return;
             }
 
-            log::info!(
-                "[ServerManager] Killing previously managed process PID={}",
-                pid
-            );
-            let mut taskkill = Command::new("taskkill");
-            apply_hidden_process_flags(&mut taskkill);
-            let _ = taskkill
-                .args(["/F", "/PID", &pid.to_string()])
-                .output()
-                .await;
-            clear_managed_pid();
+            // Also sweep any untracked stale backend processes from prior crashes/forced exits.
+            for pid in tasklist_pids_for_image(CLI_PROXY_IMAGE_NAME).await {
+                log::warn!(
+                    "[ServerManager] Killing untracked {} process PID={}",
+                    CLI_PROXY_IMAGE_NAME,
+                    pid
+                );
+                kill_windows_pid_tree(pid).await;
+            }
+
+            // Small delay for cleanup
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            return;
         }
 
         #[cfg(not(target_os = "windows"))]
         {
+            let Some(pid) = managed_pid else {
+                return;
+            };
+
             let Some(command) = ps_command_for_pid(pid).await else {
                 clear_managed_pid();
                 return;
@@ -532,10 +533,10 @@ impl ServerManager {
                 .output()
                 .await;
             clear_managed_pid();
-        }
 
-        // Small delay for cleanup
-        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            // Small delay for cleanup
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        }
     }
 
     pub async fn cleanup_port_conflicts_for_restart() -> Result<(), String> {
@@ -606,12 +607,7 @@ impl ServerManager {
 
             #[cfg(target_os = "windows")]
             {
-                let mut taskkill = Command::new("taskkill");
-                apply_hidden_process_flags(&mut taskkill);
-                let _ = taskkill
-                    .args(["/F", "/T", "/PID", &pid.to_string()])
-                    .output()
-                    .await;
+                kill_windows_pid_tree(pid).await;
             }
 
             #[cfg(not(target_os = "windows"))]
@@ -825,7 +821,8 @@ async fn ss_list_port_listeners_unix(ports: &[u16]) -> Result<Vec<(u16, u32, Str
     let port_set: std::collections::HashSet<u16> = ports.iter().copied().collect();
     let stdout = String::from_utf8_lossy(&output.stdout);
 
-    let mut pid_to_ports: std::collections::BTreeMap<u32, Vec<u16>> = std::collections::BTreeMap::new();
+    let mut pid_to_ports: std::collections::BTreeMap<u32, Vec<u16>> =
+        std::collections::BTreeMap::new();
     for line in stdout.lines() {
         let Some(port) = parse_ss_local_port(line) else {
             continue;
@@ -890,6 +887,49 @@ async fn list_port_listeners_unix() -> Result<Vec<(u16, u32, String)>, String> {
 }
 
 #[cfg(target_os = "windows")]
+async fn kill_windows_pid_tree(pid: u32) {
+    let mut taskkill = Command::new("taskkill");
+    apply_hidden_process_flags(&mut taskkill);
+    let _ = taskkill
+        .args(["/F", "/T", "/PID", &pid.to_string()])
+        .output()
+        .await;
+}
+
+#[cfg(target_os = "windows")]
+async fn tasklist_pids_for_image(image_name: &str) -> Vec<u32> {
+    let mut tasklist = Command::new("tasklist");
+    apply_hidden_process_flags(&mut tasklist);
+
+    let image_filter = format!("IMAGENAME eq {}", image_name);
+    let output = tasklist
+        .args(["/FI", &image_filter, "/FO", "CSV", "/NH"])
+        .output()
+        .await;
+
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+
+    if !output.status.success() {
+        return Vec::new();
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .filter_map(parse_tasklist_csv_image_and_pid)
+        .filter_map(|(image, pid)| {
+            if image.eq_ignore_ascii_case(image_name) {
+                Some(pid)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+#[cfg(target_os = "windows")]
 async fn tasklist_image_name_for_pid(pid: u32) -> Option<String> {
     let mut tasklist = Command::new("tasklist");
     apply_hidden_process_flags(&mut tasklist);
@@ -916,16 +956,27 @@ async fn tasklist_image_name_for_pid(pid: u32) -> Option<String> {
 
 #[cfg(target_os = "windows")]
 fn parse_tasklist_csv_image_name(line: &str) -> Option<String> {
+    parse_tasklist_csv_image_and_pid(line).map(|(image, _pid)| image)
+}
+
+#[cfg(target_os = "windows")]
+fn parse_tasklist_csv_image_and_pid(line: &str) -> Option<(String, u32)> {
     let trimmed = line.trim();
-    if let Some(rest) = trimmed.strip_prefix('"') {
-        let end = rest.find('"')?;
-        return Some(rest[..end].to_string());
+    if trimmed.is_empty() || trimmed.starts_with("INFO:") {
+        return None;
     }
 
-    trimmed
-        .split(',')
-        .next()
-        .map(|part| part.trim().to_string())
+    if trimmed.starts_with('"') {
+        let mut parts = trimmed.trim_matches('"').split("\",\"");
+        let image = parts.next()?.trim().trim_matches('"').to_string();
+        let pid = parts.next()?.trim().trim_matches('"').parse::<u32>().ok()?;
+        return Some((image, pid));
+    }
+
+    let mut parts = trimmed.splitn(3, ',');
+    let image = parts.next()?.trim().trim_matches('"').to_string();
+    let pid = parts.next()?.trim().trim_matches('"').parse::<u32>().ok()?;
+    Some((image, pid))
 }
 
 fn is_codeforwarder_managed_process(image_name: &str) -> bool {
@@ -1012,6 +1063,23 @@ mod tests {
             parse_tasklist_csv_image_name(line),
             Some("cli-proxy-api-plus.exe".to_string())
         );
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn parse_tasklist_csv_image_and_pid_handles_quoted_csv() {
+        let line = r#""cli-proxy-api-plus.exe","1234","Console","1","12,345 K""#;
+        assert_eq!(
+            parse_tasklist_csv_image_and_pid(line),
+            Some(("cli-proxy-api-plus.exe".to_string(), 1234))
+        );
+    }
+
+    #[test]
+    #[cfg(target_os = "windows")]
+    fn parse_tasklist_csv_image_and_pid_ignores_info_rows() {
+        let line = "INFO: No tasks are running which match the specified criteria.";
+        assert_eq!(parse_tasklist_csv_image_and_pid(line), None);
     }
 
     #[test]

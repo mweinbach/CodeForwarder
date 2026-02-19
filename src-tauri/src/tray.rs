@@ -106,11 +106,6 @@ fn handle_menu_event(app: &AppHandle, id: &str) {
         }
         "quit" => {
             app.emit("tray_quit_clicked", ()).ok();
-            let app_handle = app.clone();
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(500));
-                app_handle.exit(0);
-            });
         }
         _ => {}
     }
