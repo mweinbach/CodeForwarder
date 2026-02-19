@@ -290,11 +290,11 @@ jobs:
             local name url sig_name sig_path sig
 
             name="$(jq -r --arg p "$pattern" '.[] | select(.name | test($p)) | .name' assets.json | head -n 1)"
-            url="$(jq -r --arg n "$name" '.[] | select(.name == $n) | .url' assets.json | head -n 1)"
+            url="https://github.com/${REPO}/releases/download/${TAG}/${name}"
             sig_name="${name}.sig"
             sig_path="$SIG_DIR/$sig_name"
 
-            if [ -z "$name" ] || [ "$name" = "null" ] || [ -z "$url" ] || [ "$url" = "null" ]; then
+            if [ -z "$name" ] || [ "$name" = "null" ]; then
               return 1
             fi
             if [ ! -f "$sig_path" ]; then
