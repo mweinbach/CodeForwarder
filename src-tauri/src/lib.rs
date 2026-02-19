@@ -126,20 +126,6 @@ pub fn run() {
             tray::setup_tray(&app_handle)?;
             tray::update_main_window_icon(&app_handle);
 
-            // macOS: enable native titlebar traffic-lights but render content underneath (no
-            // separate "top bar" area). We keep a frameless config for Windows.
-            #[cfg(target_os = "macos")]
-            {
-                if let Some(window) = app.get_webview_window("main") {
-                    window.set_decorations(true).ok();
-                    window
-                        .set_title_bar_style(tauri::TitleBarStyle::Overlay)
-                        .ok();
-                    // Ensure the window title matches the app product name.
-                    window.set_title("CodeForwarder").ok();
-                }
-            }
-
             // Ensure auth directory exists
             auth_manager::get_auth_dir();
 

@@ -31,13 +31,15 @@ export default function TitleBar() {
     <div
       className="window-controls"
       data-tauri-drag-region
+      role="toolbar"
+      aria-label="Window controls"
       onMouseDown={handleDragMouseDown}
       onDoubleClick={handleDragDoubleClick}
     >
-      <div className="window-drag-zone" data-tauri-drag-region aria-hidden="true" />
-      <div className="window-buttons">
+      <div className="window-drag-zone flex-1" data-tauri-drag-region aria-hidden="true" />
+      <div className="window-buttons inline-flex h-full">
         <button
-          className="window-button"
+          className="window-button inline-flex h-full w-[46px] items-center justify-center"
           onMouseDown={(event) => event.stopPropagation()}
           onClick={() => appWindow.minimize()}
           title="Minimize"
@@ -45,7 +47,7 @@ export default function TitleBar() {
           <Minus size={14} />
         </button>
         <button
-          className="window-button"
+          className="window-button inline-flex h-full w-[46px] items-center justify-center"
           onMouseDown={(event) => event.stopPropagation()}
           onClick={() => appWindow.toggleMaximize()}
           title="Maximize"
@@ -53,7 +55,7 @@ export default function TitleBar() {
           <Square size={12} />
         </button>
         <button
-          className="window-button close"
+          className="window-button close inline-flex h-full w-[46px] items-center justify-center"
           onMouseDown={(event) => event.stopPropagation()}
           onClick={() => appWindow.close()}
           title="Close"
@@ -64,4 +66,3 @@ export default function TitleBar() {
     </div>
   );
 }
-

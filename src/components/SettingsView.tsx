@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { relaunch } from "@tauri-apps/plugin-process";
 import {
@@ -29,6 +29,7 @@ import TitleBar from "./TitleBar";
 import UsageDashboard from "./UsageDashboard";
 import ModelsTab from "./ModelsTab";
 import AgentsTab from "./AgentsTab";
+import TabHeader from "./TabHeader";
 import { useUpdater } from "../hooks/useUpdater";
 
 import iconAntigravityLight from "../assets/icons/light/icon-antigravity.png";
@@ -158,6 +159,10 @@ function getInitialThemeMode(): ThemeMode {
 }
 
 export default function SettingsView() {
+  return useSettingsView();
+}
+
+function useSettingsView() {
   const {
     serverState,
     downloadProgress,
@@ -198,6 +203,7 @@ export default function SettingsView() {
   const [showZaiDialog, setShowZaiDialog] = useState(false);
   const [themeMode, setThemeMode] = useState<ThemeMode>(getInitialThemeMode);
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
+  const settingsScrollRef = useRef<HTMLElement | null>(null);
   const {
     range: usageRange,
     setRange: setUsageRange,
@@ -249,9 +255,17 @@ export default function SettingsView() {
     document.documentElement.setAttribute("data-theme", themeMode);
   }, [themeMode]);
 
+  useEffect(() => {
+    if (!settingsScrollRef.current) {
+      return;
+    }
+
+    settingsScrollRef.current.scrollTop = 0;
+  }, [activeTab]);
+
   if (!serverState || !settings) {
     return (
-      <div className="settings-loading">
+      <div className="settings-loading flex h-full w-full items-center justify-center gap-2 text-[color:var(--text-secondary)]">
         <span className="spinner" />
         <span>Loading settings...</span>
       </div>
@@ -334,27 +348,27 @@ export default function SettingsView() {
   };
 
   return (
-    <div className="settings-view">
+    <div className="settings-view grid h-full w-full overflow-hidden">
       {shouldShowCustomTitleBar() ? <TitleBar /> : null}
-      <aside className="sidebar" data-tauri-drag-region>
-        <div className="sidebar-header" data-tauri-drag-region>
+      <aside className="sidebar flex min-w-0 flex-col border-r border-[color:var(--border)]" data-tauri-drag-region>
+        <div className="sidebar-header flex items-center gap-2" data-tauri-drag-region>
           <div>
-            <p className="sidebar-eyebrow">Control Center</p>
+            <p className="sidebar-eyebrow text-[10px] font-semibold tracking-[0.08em] text-[color:var(--text-muted)] uppercase">Control Center</p>
             <span className="sidebar-title">CodeForwarder</span>
           </div>
         </div>
 
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav flex flex-col gap-0.5">
           <p className="sidebar-group-label">Overview</p>
           {overviewTabs.map((item) => {
             const Icon = item.icon;
             return (
               <button
                 key={item.key}
-                className={`sidebar-item ${activeTab === item.key ? "active" : ""}`}
+                className={`sidebar-item inline-flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm font-medium transition ${activeTab === item.key ? "active" : ""}`}
                 onClick={() => setActiveTab(item.key)}
               >
-                <Icon className="sidebar-icon" />
+                <Icon className="sidebar-icon h-4 w-4 shrink-0" />
                 {item.label}
               </button>
             );
@@ -366,40 +380,40 @@ export default function SettingsView() {
             return (
               <button
                 key={item.key}
-                className={`sidebar-item ${activeTab === item.key ? "active" : ""}`}
+                className={`sidebar-item inline-flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm font-medium transition ${activeTab === item.key ? "active" : ""}`}
                 onClick={() => setActiveTab(item.key)}
               >
-                <Icon className="sidebar-icon" />
+                <Icon className="sidebar-icon h-4 w-4 shrink-0" />
                 {item.label}
               </button>
             );
           })}
         </nav>
 
-        <div className="sidebar-footer">
-          <div className={`status-pill ${serverState.is_running ? "running" : "stopped"}`}>
-            <Power className="status-icon" size={12} />
+        <div className="sidebar-footer mt-auto flex flex-col gap-1.5">
+          <div className={`status-pill inline-flex w-fit items-center gap-1.5 ${serverState.is_running ? "running" : "stopped"}`}>
+            <Power className="status-icon h-3 w-3 shrink-0" size={12} />
             {serverState.is_running ? "Online" : "Offline"}
           </div>
-          <p className="sidebar-runtime-meta">
+          <p className="sidebar-runtime-meta text-xs text-[color:var(--text-muted)]">
             {enabledServiceCount} services · {activeAccounts} accounts
           </p>
         </div>
       </aside>
 
-      <section className="app-shell">
-        <main className="settings-scroll">
+      <section className="app-shell min-w-0">
+        <main className="settings-scroll h-full" ref={settingsScrollRef}>
           {activeTab === "dashboard" && (
-            <div className="tab-content animate-in">
-              <h1 className="page-title">Dashboard</h1>
-              <p className="page-subtitle">
-                Runtime health and account readiness at a glance.
-              </p>
+            <div className="tab-content animate-in flex flex-col gap-6 pb-6">
+              <TabHeader
+                title="Dashboard"
+                subtitle="Runtime health and account readiness at a glance."
+              />
 
               {operationalError ? (
-                <div className="operation-error-banner" role="alert">
-                  <AlertCircle size={16} className="error-icon" />
-                  <p className="operation-error-message">{operationalError}</p>
+                <div className="operation-error-banner flex items-center gap-3 rounded-md border border-[color:var(--danger)]/20" role="alert">
+                  <AlertCircle size={16} className="error-icon h-4 w-4 shrink-0 text-[color:var(--danger)]" />
+                  <p className="operation-error-message flex-1">{operationalError}</p>
                   <button
                     type="button"
                     className="btn btn-sm"
@@ -410,7 +424,7 @@ export default function SettingsView() {
                 </div>
               ) : null}
 
-              <div className="stats-grid">
+              <div className="stats-grid grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 <div className="stat-item">
                   <span className="stat-label">Services</span>
                   <span className="stat-value">{enabledServiceCount}</span>
@@ -425,30 +439,30 @@ export default function SettingsView() {
                 </div>
               </div>
 
-            <section className="settings-section">
-              <div className="section-header" data-tauri-drag-region>
-                <div className="section-title-row">
-                  <Server size={14} />
-                  <h2 className="section-title">Proxy Engine</h2>
+              <section className="settings-section">
+                <div className="section-header" data-tauri-drag-region>
+                  <div className="section-title-row flex items-center gap-2 text-[color:var(--text-muted)]">
+                    <Server size={14} />
+                    <h2 className="section-title">Proxy Engine</h2>
+                  </div>
+                  <p className="section-description">
+                    Control local proxy runtime and bundled binary readiness.
+                  </p>
                 </div>
-                <p className="section-description">
-                  Control local proxy runtime and bundled binary readiness.
-                </p>
-              </div>
-              <ServerStatus
-                isRunning={serverState.is_running}
-                binaryAvailable={serverState.binary_available}
-                binaryDownloading={serverState.binary_downloading}
-                downloadProgress={downloadProgress?.progress ?? null}
-                onStartStop={handleStartStop}
-                onDownloadBinary={downloadBinary}
-              />
-            </section>
-          </div>
-        )}
+                <ServerStatus
+                  isRunning={serverState.is_running}
+                  binaryAvailable={serverState.binary_available}
+                  binaryDownloading={serverState.binary_downloading}
+                  downloadProgress={downloadProgress?.progress ?? null}
+                  onStartStop={handleStartStop}
+                  onDownloadBinary={downloadBinary}
+                />
+              </section>
+            </div>
+          )}
 
         {activeTab === "usage" && (
-          <div className="tab-content animate-in">
+          <div className="tab-content animate-in flex flex-col gap-6 pb-6">
             <UsageDashboard
               dashboard={usageDashboard}
               range={usageRange}
@@ -462,14 +476,14 @@ export default function SettingsView() {
         )}
 
         {activeTab === "services" && (
-          <div className="tab-content animate-in">
-            <h1 className="page-title">Services</h1>
-            <p className="page-subtitle">
-              Enable providers and manage connected accounts.
-            </p>
+          <div className="tab-content animate-in flex flex-col gap-6 pb-6">
+            <TabHeader
+              title="Services"
+              subtitle="Enable providers and manage connected accounts."
+            />
             {authResult ? (
               <div
-                className={`auth-result-banner ${authResult.success ? "success" : "error"}`}
+                className={`auth-result-banner rounded-md border ${authResult.success ? "success border-[color:var(--ok)]/25" : "error border-[color:var(--danger)]/20"}`}
                 role="status"
                 aria-live="polite"
               >
@@ -477,7 +491,7 @@ export default function SettingsView() {
               </div>
             ) : null}
             <section className="settings-section">
-              <div className="service-list">
+              <div className="service-list divide-y divide-[color:var(--border)]">
                 {SERVICE_ORDER.map((serviceType) => (
                   <ServiceRow
                     key={serviceType}
@@ -512,14 +526,14 @@ export default function SettingsView() {
         {activeTab === "agents" && <AgentsTab />}
 
         {activeTab === "settings" && (
-          <div className="tab-content animate-in">
-            <h1 className="page-title">Settings</h1>
-            <p className="page-subtitle">
-              Desktop behavior and local file access.
-            </p>
+          <div className="tab-content animate-in flex flex-col gap-6 pb-6">
+            <TabHeader
+              title="Settings"
+              subtitle="Desktop behavior and local file access."
+            />
             <section className="settings-section">
-              <div className="setting-row">
-                <div className="setting-label">
+              <div className="setting-row flex items-center justify-between gap-4">
+                <div className="setting-label min-w-0 flex-1">
                   <span>App updates</span>
                   <small>
                     {updateStatusLabel}{" "}
@@ -528,7 +542,7 @@ export default function SettingsView() {
                   </small>
                   <small>{updateCheckedAtLabel}</small>
                 </div>
-                <div className="button-row">
+                <div className="button-row flex items-center justify-end gap-2">
                   {updateStatus === "ready_to_restart" ? (
                     <button
                       className="btn btn-sm"
@@ -548,12 +562,12 @@ export default function SettingsView() {
                   </button>
                 </div>
               </div>
-              <div className="setting-row">
-                <div className="setting-label">
+              <div className="setting-row flex items-center justify-between gap-4">
+                <div className="setting-label min-w-0 flex-1">
                   <span>Launch at login</span>
                   <small>Start CodeForwarder automatically.</small>
                 </div>
-                <label className="toggle-switch">
+                <label className="toggle-switch" aria-label="Launch at login">
                   <input
                     type="checkbox"
                     checked={settings.launch_at_login}
@@ -562,8 +576,8 @@ export default function SettingsView() {
                   <span className="toggle-slider" />
                 </label>
               </div>
-              <div className="setting-row">
-                <div className="setting-label">
+              <div className="setting-row flex items-center justify-between gap-4">
+                <div className="setting-label min-w-0 flex-1">
                   <span>Auth files</span>
                   <small>Open the folder where account files are stored.</small>
                 </div>

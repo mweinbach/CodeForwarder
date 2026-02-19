@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   type AgentInstallResult,
@@ -7,17 +8,9 @@ import {
   type ProviderModelInfo,
 } from "../types";
 import { toErrorMessage } from "../utils/error";
+import { renderAgentModelInstallDialogView } from "./AgentModelInstallDialogView";
 
 type FactoryProvider = "anthropic" | "openai";
-
-const PROVIDER_CHANNELS: Array<{ key: string; label: string }> = [
-  { key: "claude", label: "Claude" },
-  { key: "codex", label: "Codex" },
-  { key: "gemini", label: "Gemini" },
-  { key: "qwen", label: "Qwen" },
-  { key: "github-copilot", label: "GitHub Copilot" },
-  { key: "antigravity", label: "Antigravity" },
-];
 
 function channelDefaults(channel: string): { provider: FactoryProvider; baseUrl: string } {
   if (channel === "claude") {
@@ -149,7 +142,51 @@ interface AgentModelInstallDialogProps {
   onInstalled?: (result: AgentInstallResult) => void;
 }
 
-export default function AgentModelInstallDialog({
+interface InstallDialogState {
+  channel: string;
+  search: string;
+  selectedIds: Set<string>;
+  factoryProvider: FactoryProvider;
+  baseUrl: string;
+  displayPrefix: string;
+  noImageSupport: boolean;
+  includeBase: boolean;
+  selectedLevels: Set<string>;
+  budgetCsv: string;
+}
+
+interface ModelsFetchState {
+  modelsResponse: ProviderModelDefinitionsResponse | null;
+  isLoading: boolean;
+  lastError: string | null;
+}
+
+function createInitialState(
+  initialChannel: string | undefined,
+  defaultDisplayPrefix: string | undefined,
+  agentLabel: string,
+): InstallDialogState {
+  const channel = initialChannel ?? "claude";
+  const defaults = channelDefaults(channel);
+  return {
+    channel,
+    search: "",
+    selectedIds: new Set(),
+    factoryProvider: defaults.provider,
+    baseUrl: defaults.baseUrl,
+    displayPrefix: defaultDisplayPrefix ?? `${agentLabel}: `,
+    noImageSupport: false,
+    includeBase: true,
+    selectedLevels: new Set(["high"]),
+    budgetCsv: "4000, 10000, 32000",
+  };
+}
+
+export default function AgentModelInstallDialog(props: AgentModelInstallDialogProps) {
+  return useAgentModelInstallDialog(props);
+}
+
+function useAgentModelInstallDialog({
   isOpen,
   agentKey,
   agentLabel,
@@ -158,69 +195,89 @@ export default function AgentModelInstallDialog({
   onClose,
   onInstalled,
 }: AgentModelInstallDialogProps) {
-  const [channel, setChannel] = useState(initialChannel ?? "claude");
-  const [modelsResponse, setModelsResponse] = useState<ProviderModelDefinitionsResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [lastError, setLastError] = useState<string | null>(null);
-
-  const [search, setSearch] = useState("");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-
-  const defaults = useMemo(() => channelDefaults(channel), [channel]);
-  const [factoryProvider, setFactoryProvider] = useState<FactoryProvider>(defaults.provider);
-  const [baseUrl, setBaseUrl] = useState(defaults.baseUrl);
-  const [displayPrefix, setDisplayPrefix] = useState(
-    defaultDisplayPrefix ?? `${agentLabel}: `,
+  const [dialogState, setDialogState] = useState<InstallDialogState>(() =>
+    createInitialState(initialChannel, defaultDisplayPrefix, agentLabel),
   );
-  const [noImageSupport, setNoImageSupport] = useState(false);
+  const [modelsFetch, setModelsFetch] = useState<ModelsFetchState>({
+    modelsResponse: null,
+    isLoading: false,
+    lastError: null,
+  });
+  const {
+    channel,
+    search,
+    selectedIds,
+    factoryProvider,
+    baseUrl,
+    displayPrefix,
+    noImageSupport,
+    includeBase,
+    selectedLevels,
+    budgetCsv,
+  } = dialogState;
 
-  const [includeBase, setIncludeBase] = useState(true);
-  const [selectedLevels, setSelectedLevels] = useState<Set<string>>(new Set(["high"]));
-  const [budgetCsv, setBudgetCsv] = useState("4000, 10000, 32000");
-
+  // eslint-disable-next-line react-doctor/no-cascading-set-state
   useEffect(() => {
     if (!isOpen) return;
-    setChannel(initialChannel ?? "claude");
-    setSearch("");
-    setSelectedIds(new Set());
-    setIncludeBase(true);
-    setSelectedLevels(new Set(["high"]));
-    setBudgetCsv("4000, 10000, 32000");
-    setNoImageSupport(false);
-    setDisplayPrefix(defaultDisplayPrefix ?? `${agentLabel}: `);
-    setLastError(null);
+    setDialogState(createInitialState(initialChannel, defaultDisplayPrefix, agentLabel));
+    setModelsFetch((prev) => ({ ...prev, lastError: null }));
   }, [agentLabel, defaultDisplayPrefix, initialChannel, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
     const next = channelDefaults(channel);
-    setFactoryProvider(next.provider);
-    setBaseUrl(next.baseUrl);
+    setDialogState((prev) => ({
+      ...prev,
+      factoryProvider: next.provider,
+      baseUrl: next.baseUrl,
+    }));
   }, [channel, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
-    setIsLoading(true);
-    setLastError(null);
-    invoke<ProviderModelDefinitionsResponse>("get_provider_model_definitions", { channel })
-      .then((resp) => {
-        setModelsResponse(resp);
-      })
-      .catch((err) => {
-        setModelsResponse(null);
-        setLastError(
-          toErrorMessage(
+    setModelsFetch((prev) => ({
+      ...prev,
+      isLoading: true,
+      lastError: null,
+    }));
+  }, [channel, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const resp = await invoke<ProviderModelDefinitionsResponse>(
+          "get_provider_model_definitions",
+          { channel },
+        );
+        if (cancelled) return;
+        setModelsFetch({
+          modelsResponse: resp,
+          isLoading: false,
+          lastError: null,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        setModelsFetch({
+          modelsResponse: null,
+          isLoading: false,
+          lastError: toErrorMessage(
             err,
             "Failed to load models (make sure Proxy Engine is running)",
           ),
-        );
-      })
-      .finally(() => {
-        setIsLoading(false);
-      });
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [channel, isOpen]);
 
-  const allModels = modelsResponse?.models ?? [];
+  const allModels = modelsFetch.modelsResponse?.models ?? [];
 
   const filteredModels = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -277,27 +334,44 @@ export default function AgentModelInstallDialog({
   if (!isOpen) return null;
 
   const toggleSelected = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
+    setDialogState((prev) => {
+      const next = new Set(prev.selectedIds);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      return next;
+      return { ...prev, selectedIds: next };
     });
   };
 
   const setAllVisible = (checked: boolean) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
+    setDialogState((prev) => {
+      const next = new Set(prev.selectedIds);
       for (const m of filteredModels) {
         if (checked) next.add(m.id);
         else next.delete(m.id);
       }
-      return next;
+      return { ...prev, selectedIds: next };
     });
   };
 
+  const handleOverlayMouseDown = (event: MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) {
+      onClose();
+    }
+  };
+
+  const handleOverlayKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (
+      event.key === "Escape" ||
+      event.key === "Enter" ||
+      event.key === " "
+    ) {
+      event.preventDefault();
+      onClose();
+    }
+  };
+
   const handleInstall = async () => {
-    setLastError(null);
+    setModelsFetch((prev) => ({ ...prev, lastError: null }));
     const prefix = displayPrefix;
     const inputs: FactoryCustomModelInput[] = [];
     for (const model of selectedModels) {
@@ -346,7 +420,10 @@ export default function AgentModelInstallDialog({
       onInstalled?.(result);
       onClose();
     } catch (err) {
-      setLastError(toErrorMessage(err, "Failed to install models"));
+      setModelsFetch((prev) => ({
+        ...prev,
+        lastError: toErrorMessage(err, "Failed to install models"),
+      }));
     }
   };
 
@@ -354,221 +431,87 @@ export default function AgentModelInstallDialog({
   const budgetsDisabled = selectedModels.every((m) => !canUseThinkingBudgets(m));
   const canInstall = selectedModels.length > 0 && isProxyBaseUrl(baseUrl);
 
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content modal-content-wide" onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">Add Models to {agentLabel}</h3>
-        <p className="modal-subtitle">
-          Pick a provider catalog, select models, and choose reasoning variants to install into
-          Factory custom models.
-        </p>
+  const handleChannelChange = (nextChannel: string) => {
+    setDialogState((prev) => ({ ...prev, channel: nextChannel }));
+  };
 
-        {lastError ? (
-          <div className="auth-result-banner error" role="alert">
-            <p className="auth-result-message">{lastError}</p>
-          </div>
-        ) : null}
+  const handleSearchChange = (nextSearch: string) => {
+    setDialogState((prev) => ({ ...prev, search: nextSearch }));
+  };
 
-        <div className="agent-model-controls">
-          <label className="agent-model-field">
-            <span className="agent-model-label">Provider</span>
-            <select
-              value={channel}
-              onChange={(e) => setChannel(e.target.value)}
-              className="agent-model-select"
-            >
-              {PROVIDER_CHANNELS.map((opt) => (
-                <option key={opt.key} value={opt.key}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="agent-model-field">
-            <span className="agent-model-label">Search</span>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter models..."
-            />
-          </label>
-        </div>
+  const handleIncludeBaseChange = (checked: boolean) => {
+    setDialogState((prev) => ({ ...prev, includeBase: checked }));
+  };
 
-        <div className="agent-model-grid">
-          <section className="agent-model-pane">
-            <div className="agent-model-pane-head">
-              <div className="agent-model-pane-title">
-                <strong>Models</strong>
-                <span className="agent-model-pane-meta">
-                  {isLoading ? "Loading..." : `${filteredModels.length} shown / ${allModels.length} total`}
-                </span>
-              </div>
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={
-                    filteredModels.length > 0 &&
-                    filteredModels.every((m) => selectedIds.has(m.id))
-                  }
-                  onChange={(e) => setAllVisible(e.target.checked)}
-                />
-                Select visible
-              </label>
-            </div>
+  const handleToggleLevel = (level: string, checked: boolean) => {
+    setDialogState((prev) => {
+      const next = new Set(prev.selectedLevels);
+      if (checked) next.add(level);
+      else next.delete(level);
+      return { ...prev, selectedLevels: next };
+    });
+  };
 
-            <div className="usage-table-wrap model-table-wrap">
-              <table className="usage-table">
-                <thead>
-                  <tr>
-                    <th style={{ width: 44 }}>Add</th>
-                    <th>Model</th>
-                    <th>Thinking</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredModels.map((m) => (
-                    <tr key={m.id}>
-                      <td>
-                        <input
-                          type="checkbox"
-                          checked={selectedIds.has(m.id)}
-                          onChange={() => toggleSelected(m.id)}
-                        />
-                      </td>
-                      <td>
-                        <div className="model-cell">
-                          <div className="model-primary">{m.id}</div>
-                          {m.display_name ? (
-                            <div className="model-secondary">{m.display_name}</div>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="model-secondary">{formatThinkingSummary(m)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
+  const handleBudgetCsvChange = (value: string) => {
+    setDialogState((prev) => ({ ...prev, budgetCsv: value }));
+  };
 
-          <section className="agent-model-pane">
-            <div className="agent-model-pane-head">
-              <div className="agent-model-pane-title">
-                <strong>Install Options</strong>
-                <span className="agent-model-pane-meta">{previewCount} variants</span>
-              </div>
-            </div>
+  const handleFactoryProviderChange = (provider: string) => {
+    setDialogState((prev) => ({
+      ...prev,
+      factoryProvider: provider as FactoryProvider,
+    }));
+  };
 
-            <div className="agent-model-options">
-              <label className="checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={includeBase}
-                  onChange={(e) => setIncludeBase(e.target.checked)}
-                />
-                Include base model
-              </label>
+  const handleBaseUrlChange = (nextBaseUrl: string) => {
+    setDialogState((prev) => ({ ...prev, baseUrl: nextBaseUrl }));
+  };
 
-              <div className="agent-model-section">
-                <div className="agent-model-section-title">Reasoning levels</div>
-                <div className={`agent-model-chiprow ${levelsDisabled ? "is-disabled" : ""}`}>
-                  {unionLevels.length === 0 ? (
-                    <span className="empty-note">Select a model with level-based reasoning.</span>
-                  ) : (
-                    unionLevels.map((level) => (
-                      <label key={level} className="chip-check">
-                        <input
-                          type="checkbox"
-                          checked={selectedLevels.has(level)}
-                          onChange={(e) => {
-                            const checked = e.target.checked;
-                            setSelectedLevels((prev) => {
-                              const next = new Set(prev);
-                              if (checked) next.add(level);
-                              else next.delete(level);
-                              return next;
-                            });
-                          }}
-                        />
-                        <span>{level}</span>
-                      </label>
-                    ))
-                  )}
-                </div>
-              </div>
+  const handleDisplayPrefixChange = (prefix: string) => {
+    setDialogState((prev) => ({ ...prev, displayPrefix: prefix }));
+  };
 
-              <div className="agent-model-section">
-                <div className="agent-model-section-title">Thinking budgets</div>
-                <input
-                  type="text"
-                  value={budgetCsv}
-                  onChange={(e) => setBudgetCsv(e.target.value)}
-                  disabled={budgetsDisabled}
-                  placeholder="e.g. 4000, 10000, 32000"
-                />
-                <div className="agent-model-hint">
-                  Budgets above ~32000 will be clamped by CodeForwarder.
-                </div>
-              </div>
+  const handleNoImageSupportChange = (checked: boolean) => {
+    setDialogState((prev) => ({ ...prev, noImageSupport: checked }));
+  };
 
-              <div className="agent-model-section">
-                <div className="agent-model-section-title">Factory mapping</div>
-                <label className="agent-model-inline">
-                  <span>Provider</span>
-                  <select
-                    value={factoryProvider}
-                    onChange={(e) => setFactoryProvider(e.target.value as FactoryProvider)}
-                  >
-                    <option value="anthropic">anthropic</option>
-                    <option value="openai">openai</option>
-                  </select>
-                </label>
-                <label className="agent-model-inline">
-                  <span>Base URL</span>
-                  <input type="text" value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
-                </label>
-                {!isProxyBaseUrl(baseUrl) ? (
-                  <div className="agent-model-hint">
-                    Only proxy URLs on localhost:8317 are supported.
-                  </div>
-                ) : null}
-                <label className="agent-model-inline">
-                  <span>Name prefix</span>
-                  <input
-                    type="text"
-                    value={displayPrefix}
-                    onChange={(e) => setDisplayPrefix(e.target.value)}
-                    placeholder={`${agentLabel}: `}
-                  />
-                </label>
-                <label className="checkbox-row">
-                  <input
-                    type="checkbox"
-                    checked={noImageSupport}
-                    onChange={(e) => setNoImageSupport(e.target.checked)}
-                  />
-                  Mark as no image support
-                </label>
-              </div>
-            </div>
-          </section>
-        </div>
-
-        <div className="modal-buttons">
-          <button type="button" className="btn btn-cancel" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={!canInstall || isLoading}
-            onClick={handleInstall}
-          >
-            Install
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  return renderAgentModelInstallDialogView({
+    agentLabel,
+    channel,
+    search,
+    filteredModels,
+    allModelsCount: allModels.length,
+    selectedIds,
+    includeBase,
+    previewCount,
+    levelsDisabled,
+    unionLevels,
+    selectedLevels,
+    budgetCsv,
+    budgetsDisabled,
+    factoryProvider,
+    baseUrl,
+    displayPrefix,
+    noImageSupport,
+    canInstall,
+    isLoading: modelsFetch.isLoading,
+    lastError: modelsFetch.lastError,
+    isProxyBaseUrl: isProxyBaseUrl(baseUrl),
+    onClose,
+    onInstall: handleInstall,
+    onSetAllVisible: setAllVisible,
+    onToggleSelected: toggleSelected,
+    onChannelChange: handleChannelChange,
+    onSearchChange: handleSearchChange,
+    onIncludeBaseChange: handleIncludeBaseChange,
+    onToggleLevel: handleToggleLevel,
+    onBudgetCsvChange: handleBudgetCsvChange,
+    onFactoryProviderChange: handleFactoryProviderChange,
+    onBaseUrlChange: handleBaseUrlChange,
+    onDisplayPrefixChange: handleDisplayPrefixChange,
+    onNoImageSupportChange: handleNoImageSupportChange,
+    onOverlayMouseDown: handleOverlayMouseDown,
+    onOverlayKeyDown: handleOverlayKeyDown,
+    formatThinkingSummary,
+  });
 }

@@ -40,11 +40,6 @@ export interface AppSettings {
   launch_at_login: boolean;
 }
 
-export interface AuthCommand {
-  type: string;
-  data?: { email: string };
-}
-
 export interface BinaryDownloadProgress {
   progress: number;
   bytes_downloaded: number;
@@ -53,7 +48,7 @@ export interface BinaryDownloadProgress {
 
 export type UsageRange = "24h" | "7d" | "30d" | "all";
 
-export interface UsageSummary {
+interface UsageSummary {
   total_requests: number;
   total_tokens: number;
   input_tokens: number;
@@ -64,7 +59,7 @@ export interface UsageSummary {
   error_rate: number;
 }
 
-export interface UsageTimeseriesPoint {
+interface UsageTimeseriesPoint {
   bucket: string;
   requests: number;
   total_tokens: number;
@@ -129,16 +124,6 @@ export const PROVIDER_KEYS: Record<ServiceType, string> = {
   qwen: "qwen",
   antigravity: "antigravity",
   zai: "zai",
-};
-
-export const SERVICE_ICONS: Record<ServiceType, string> = {
-  claude: "icon-claude.png",
-  codex: "icon-codex.png",
-  "github-copilot": "icon-copilot.png",
-  gemini: "icon-gemini.png",
-  qwen: "icon-qwen.png",
-  antigravity: "icon-antigravity.png",
-  zai: "icon-zai.png",
 };
 
 // ---------------------------------------------------------------------------

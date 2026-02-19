@@ -23,17 +23,17 @@ export default function AccountRow({
   };
 
   return (
-    <div className={`account-row ${account.is_expired ? "is-expired" : ""}`}>
+    <div className={`account-row flex items-center gap-2 py-2 ${account.is_expired ? "is-expired opacity-60" : ""}`}>
       <span
-        className={`account-dot ${account.is_expired ? "expired" : "active"}`}
+        className={`account-dot h-1.5 w-1.5 shrink-0 rounded-full ${account.is_expired ? "expired" : "active"}`}
       />
-      <span className="account-name" title={account.display_name}>
+      <span className="account-name flex-1 truncate text-sm" title={account.display_name}>
         {account.display_name}
       </span>
       {account.is_expired && (
-        <span className="expired-badge">(expired)</span>
+        <span className="expired-badge text-xs font-medium text-[color:var(--warn)]">(expired)</span>
       )}
-      <button type="button" className="btn-remove" onClick={handleRemove} title="Remove account">
+      <button type="button" className="btn-remove inline-flex items-center p-0 text-xs font-medium text-[color:var(--danger)] opacity-70 transition hover:opacity-100" onClick={handleRemove} title="Remove account">
         <Trash2 size={12} />
       </button>
     </div>

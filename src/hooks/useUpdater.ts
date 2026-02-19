@@ -47,6 +47,20 @@ function persistLastUpdateCheckAt(value: number): void {
 }
 
 function getErrorMessage(error: unknown): string {
+  if (typeof error === "string" && error.trim() !== "") {
+    return error.trim();
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string" &&
+    (error as { message: string }).message.trim() !== ""
+  ) {
+    return (error as { message: string }).message.trim();
+  }
+
   if (error instanceof Error && error.message) {
     return error.message;
   }
@@ -56,6 +70,11 @@ function getErrorMessage(error: unknown): string {
 function isNonFatalUpdateCheckError(error: unknown): boolean {
   const message = getErrorMessage(error).toLowerCase();
   return (
+    message.includes("connection error") ||
+    message.includes("network issue") ||
+    message.includes("internet connection") ||
+    message.includes("firewall") ||
+    message.includes("proxy settings") ||
     message.includes("status code") ||
     message.includes("failed to fetch") ||
     message.includes("network") ||
@@ -139,15 +158,17 @@ export function useUpdater() {
         setStatus("ready_to_restart");
         await update.close();
       } catch (error) {
-        if (isCheckPhase && isNonFatalUpdateCheckError(error)) {
+        if (isNonFatalUpdateCheckError(error)) {
           const checkedAt = Date.now();
           persistLastUpdateCheckAt(checkedAt);
           setLastCheckedAt(checkedAt);
           setStatus("unavailable");
           setLastError(
-            "Update server is currently unavailable. The app will retry later."
+            isCheckPhase
+              ? "Update server is currently unavailable. The app will retry later."
+              : "Update download failed due to a network issue. Check your connection and retry."
           );
-          console.warn("[updater] Update check unavailable:", error);
+          console.warn("[updater] Update unavailable:", error);
           return;
         }
 

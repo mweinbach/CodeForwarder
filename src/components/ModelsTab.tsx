@@ -4,6 +4,7 @@ import { Bot, RefreshCw } from "lucide-react";
 import type { ProviderModelDefinitionsResponse, ProviderModelInfo, AgentInstallResult } from "../types";
 import { toErrorMessage } from "../utils/error";
 import AgentModelInstallDialog from "./AgentModelInstallDialog";
+import TabHeader from "./TabHeader";
 
 const PROVIDER_CHANNELS: Array<{ key: string; label: string }> = [
   { key: "claude", label: "Claude" },
@@ -37,79 +38,106 @@ function supportsThinking(model: ProviderModelInfo): boolean {
   return model.thinking?.min != null || model.thinking?.max != null;
 }
 
-export default function ModelsTab() {
-  const [channel, setChannel] = useState("claude");
-  const [search, setSearch] = useState("");
-  const [modelsResponse, setModelsResponse] = useState<ProviderModelDefinitionsResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [lastError, setLastError] = useState<string | null>(null);
+interface ModelsTabQueryState {
+  channel: string;
+  search: string;
+}
 
-  const [showInstallDialog, setShowInstallDialog] = useState(false);
-  const [lastInstallResult, setLastInstallResult] = useState<AgentInstallResult | null>(null);
+interface ModelsTabDataState {
+  modelsResponse: ProviderModelDefinitionsResponse | null;
+  isLoading: boolean;
+  lastError: string | null;
+}
+
+interface ModelsTabInstallState {
+  showInstallDialog: boolean;
+  lastInstallResult: AgentInstallResult | null;
+}
+
+export default function ModelsTab() {
+  const [query, setQuery] = useState<ModelsTabQueryState>({
+    channel: "claude",
+    search: "",
+  });
+  const [dataState, setDataState] = useState<ModelsTabDataState>({
+    modelsResponse: null,
+    isLoading: false,
+    lastError: null,
+  });
+  const [installState, setInstallState] = useState<ModelsTabInstallState>({
+    showInstallDialog: false,
+    lastInstallResult: null,
+  });
 
   const refresh = async () => {
-    setIsLoading(true);
-    setLastError(null);
+    setDataState((prev) => ({ ...prev, isLoading: true, lastError: null }));
     try {
       const resp = await invoke<ProviderModelDefinitionsResponse>("get_provider_model_definitions", {
-        channel,
+        channel: query.channel,
       });
-      setModelsResponse(resp);
+      setDataState({
+        modelsResponse: resp,
+        isLoading: false,
+        lastError: null,
+      });
     } catch (err) {
-      setModelsResponse(null);
-      setLastError(toErrorMessage(err, "Failed to load models (make sure Proxy Engine is running)"));
-    } finally {
-      setIsLoading(false);
+      setDataState({
+        modelsResponse: null,
+        isLoading: false,
+        lastError: toErrorMessage(err, "Failed to load models (make sure Proxy Engine is running)"),
+      });
     }
   };
 
   useEffect(() => {
     refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel]);
+  }, [query.channel]);
 
-  const allModels = modelsResponse?.models ?? [];
-  const thinkingReadyCount = useMemo(
-    () => allModels.filter((model) => supportsThinking(model)).length,
-    [allModels],
-  );
+  const allModels = dataState.modelsResponse?.models ?? [];
+  const thinkingReadyCount = allModels.filter((model) => supportsThinking(model)).length;
 
   const filteredModels = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = query.search.trim().toLowerCase();
     if (q === "") return allModels;
     return allModels.filter((m) => {
       const id = m.id.toLowerCase();
       const dn = (m.display_name ?? "").toLowerCase();
       return id.includes(q) || dn.includes(q);
     });
-  }, [allModels, search]);
+  }, [allModels, query.search]);
 
   return (
-    <div className="tab-content animate-in">
-      <h1 className="page-title">Models</h1>
-      <p className="page-subtitle">
-        Browse runtime model catalogs and install selections into Custom Models.
-      </p>
+    <div className="tab-content animate-in flex flex-col gap-6 pb-6">
+      <TabHeader
+        title="Models"
+        subtitle="Browse runtime model catalogs and install selections into Custom Models."
+      />
 
-      {lastInstallResult ? (
-        <div className="auth-result-banner success" role="status" aria-live="polite">
+      {installState.lastInstallResult ? (
+        <div className="auth-result-banner success rounded-md border border-[color:var(--ok)]/25" role="status" aria-live="polite">
           <p className="auth-result-message">
-            Installed for {lastInstallResult.agent_key}: added {lastInstallResult.added}, skipped {lastInstallResult.skipped_duplicates} duplicates.
+            Installed for {installState.lastInstallResult.agent_key}: added {installState.lastInstallResult.added}, skipped {installState.lastInstallResult.skipped_duplicates} duplicates.
           </p>
         </div>
       ) : null}
 
-      {lastError ? (
-        <div className="auth-result-banner error" role="alert">
-          <p className="auth-result-message">{lastError}</p>
+      {dataState.lastError ? (
+        <div className="auth-result-banner error rounded-md border border-[color:var(--danger)]/20" role="alert">
+          <p className="auth-result-message">{dataState.lastError}</p>
         </div>
       ) : null}
 
       <section className="settings-section">
-        <div className="models-toolbar">
-          <label className="models-field">
+        <div className="models-toolbar flex flex-wrap items-end gap-3">
+          <label className="models-field min-w-[180px] flex-1">
             <span className="models-label">Provider</span>
-            <select value={channel} onChange={(e) => setChannel(e.target.value)}>
+            <select
+              value={query.channel}
+              onChange={(e) =>
+                setQuery((prev) => ({ ...prev, channel: e.target.value }))
+              }
+            >
               {PROVIDER_CHANNELS.map((opt) => (
                 <option key={opt.key} value={opt.key}>
                   {opt.label}
@@ -118,34 +146,43 @@ export default function ModelsTab() {
             </select>
           </label>
 
-          <label className="models-field">
-            <span className="models-label">Search</span>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter models..."
-            />
-          </label>
+          <label className="models-field min-w-[220px] flex-[2]">
+              <span className="models-label">Search</span>
+              <input
+                type="text"
+                value={query.search}
+                onChange={(e) =>
+                  setQuery((prev) => ({ ...prev, search: e.target.value }))
+                }
+                placeholder="Filter models..."
+              />
+            </label>
 
-          <div className="models-actions">
+          <div className="models-actions inline-flex flex-wrap items-center gap-2">
             <button
               type="button"
               className="btn btn-sm"
-              onClick={() => setShowInstallDialog(true)}
-              disabled={isLoading}
+              onClick={() =>
+                setInstallState((prev) => ({ ...prev, showInstallDialog: true }))
+              }
+              disabled={dataState.isLoading}
             >
               <Bot size={14} />
               Add to Custom Models
             </button>
-            <button type="button" className="btn btn-sm" onClick={refresh} disabled={isLoading}>
-              <RefreshCw size={14} className={isLoading ? "spin" : ""} />
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={refresh}
+              disabled={dataState.isLoading}
+            >
+              <RefreshCw size={14} className={dataState.isLoading ? "spin" : ""} />
               Refresh
             </button>
           </div>
         </div>
 
-        <div className="stats-grid">
+        <div className="stats-grid grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
           <div className="stat-item">
             <span className="stat-label">Available</span>
             <span className="stat-value">{allModels.length}</span>
@@ -160,7 +197,7 @@ export default function ModelsTab() {
           </div>
         </div>
 
-        <div className="usage-table-wrap model-table-wrap">
+        <div className="usage-table-wrap model-table-wrap overflow-auto rounded-md border border-[color:var(--border)]">
           <table className="usage-table">
             <thead>
               <tr>
@@ -172,35 +209,37 @@ export default function ModelsTab() {
               {filteredModels.map((m) => (
                 <tr key={m.id}>
                   <td>
-                    <div className="model-cell">
-                      <div className="model-primary">{m.id}</div>
-                      {m.display_name ? <div className="model-secondary">{m.display_name}</div> : null}
+                    <div className="model-cell flex flex-col gap-0.5">
+                      <div className="model-primary font-semibold text-[color:var(--text-primary)]">{m.id}</div>
+                      {m.display_name ? <div className="model-secondary text-xs text-[color:var(--text-muted)]">{m.display_name}</div> : null}
                     </div>
                   </td>
-                  <td className="model-secondary">{formatThinkingSummary(m)}</td>
+                  <td className="model-secondary text-xs text-[color:var(--text-muted)]">{formatThinkingSummary(m)}</td>
                 </tr>
               ))}
               {filteredModels.length === 0 ? (
                 <tr>
-                  <td colSpan={2} className="model-secondary">
-                    {isLoading ? "Loading..." : "No models found."}
-                  </td>
-                </tr>
-              ) : null}
+                    <td colSpan={2} className="model-secondary text-xs text-[color:var(--text-muted)]">
+                      {dataState.isLoading ? "Loading..." : "No models found."}
+                    </td>
+                  </tr>
+                ) : null}
             </tbody>
           </table>
         </div>
       </section>
 
       <AgentModelInstallDialog
-        isOpen={showInstallDialog}
+        isOpen={installState.showInstallDialog}
         agentKey="codeforwarder"
         agentLabel="Custom Models"
         defaultDisplayPrefix=""
-        initialChannel={channel}
-        onClose={() => setShowInstallDialog(false)}
+        initialChannel={query.channel}
+        onClose={() =>
+          setInstallState((prev) => ({ ...prev, showInstallDialog: false }))
+        }
         onInstalled={(result) => {
-          setLastInstallResult(result);
+          setInstallState((prev) => ({ ...prev, lastInstallResult: result }));
           // Refresh list after install so user can keep browsing.
           refresh();
         }}

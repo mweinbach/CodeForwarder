@@ -11,18 +11,12 @@ export default function VercelGatewayControls({
   apiKey,
   onSave,
 }: VercelGatewayControlsProps) {
-  const [localEnabled, setLocalEnabled] = useState(enabled);
-  const [localKey, setLocalKey] = useState(apiKey);
+  const [draftKey, setDraftKey] = useState("");
+  const [isDirty, setIsDirty] = useState(false);
   const [showingSaved, setShowingSaved] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  useEffect(() => {
-    setLocalEnabled(enabled);
-  }, [enabled]);
-
-  useEffect(() => {
-    setLocalKey(apiKey);
-  }, [apiKey]);
+  const localKey = isDirty ? draftKey : apiKey;
 
   useEffect(() => {
     return () => {
@@ -33,41 +27,47 @@ export default function VercelGatewayControls({
   }, []);
 
   const handleToggle = (checked: boolean) => {
-    setLocalEnabled(checked);
+    onSave(checked, localKey);
     if (!checked) {
-      onSave(false, localKey);
+      setDraftKey("");
+      setIsDirty(false);
     }
   };
 
   const handleSave = () => {
-    onSave(localEnabled, localKey);
+    onSave(enabled, localKey);
     setShowingSaved(true);
+    setDraftKey("");
+    setIsDirty(false);
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(() => setShowingSaved(false), 1500);
   };
 
   return (
-    <div className="vercel-controls">
-      <label className="checkbox-row">
+    <div className="vercel-controls mt-3 border-t border-[color:var(--border)] pt-3">
+      <label className="checkbox-row inline-flex items-center gap-2 text-sm">
         <input
           type="checkbox"
-          checked={localEnabled}
+          checked={enabled}
           onChange={(e) => handleToggle(e.target.checked)}
         />
         <span>Use Vercel AI Gateway</span>
       </label>
-      {localEnabled && (
-        <div className="vercel-key-row">
-          <span className="vercel-key-label">Vercel API key</span>
+      {enabled && (
+        <div className="vercel-key-row mt-2 grid grid-cols-[1fr_auto] items-center gap-2">
+          <span className="vercel-key-label col-span-full text-xs text-[color:var(--text-muted)]">Vercel API key</span>
           <input
             type="password"
             className="vercel-key-input"
             placeholder="vercel_ai_xxxxx"
             value={localKey}
-            onChange={(e) => setLocalKey(e.target.value)}
+            onChange={(e) => {
+              setDraftKey(e.target.value);
+              setIsDirty(true);
+            }}
           />
           {showingSaved ? (
-            <span className="saved-text">Saved</span>
+            <span className="saved-text text-xs font-medium text-[color:var(--ok)]">Saved</span>
           ) : (
             <button
               className="btn btn-sm"

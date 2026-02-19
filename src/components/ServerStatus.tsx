@@ -23,25 +23,25 @@ export default function ServerStatus({
 
   if (!binaryAvailable) {
     return (
-      <div className="server-status">
-        <div className="status-copy">
-          <span className="status-label">Proxy engine</span>
-          <p className="status-caption">
+      <div className="server-status flex flex-wrap items-center justify-between gap-4">
+        <div className="status-copy flex min-w-0 flex-1 flex-col gap-1">
+          <span className="status-label text-sm font-semibold">Proxy engine</span>
+          <p className="status-caption text-sm text-[color:var(--text-secondary)]">
             No runtime detected yet. Download the latest CLIProxyAPIPlus binary.
           </p>
-          <p className="status-subhint">
+          <p className="status-subhint text-xs text-[color:var(--text-muted)]">
             If this build includes a bundled runtime, it will be detected automatically.
           </p>
         </div>
-        <div className="status-right">
+        <div className="status-right inline-flex items-center">
           {binaryDownloading ? (
-            <div className="download-progress">
+            <div className="download-progress flex w-40 flex-col gap-1.5">
               <progress
-                className="download-progress-bar"
+                className="download-progress-bar h-1.5 w-full overflow-hidden rounded-full border-0 bg-[color:var(--track)]"
                 value={downloadProgress ?? undefined}
                 max={100}
               />
-              <span className="progress-text">
+              <span className="progress-text text-right text-xs text-[color:var(--text-muted)]">
                 {downloadProgress != null
                   ? `${Math.round(downloadProgress)}% complete`
                   : "Downloading..."}
@@ -59,17 +59,17 @@ export default function ServerStatus({
   }
 
   return (
-    <div className="server-status">
-      <div className="status-copy">
-        <span className="status-label">Proxy engine</span>
-        <p className="status-caption">{readyCaption}</p>
-        <p className="status-subhint">
+    <div className="server-status flex flex-wrap items-center justify-between gap-4">
+      <div className="status-copy flex min-w-0 flex-1 flex-col gap-1">
+        <span className="status-label text-sm font-semibold">Proxy engine</span>
+        <p className="status-caption text-sm text-[color:var(--text-secondary)]">{readyCaption}</p>
+        <p className="status-subhint text-xs text-[color:var(--text-muted)]">
           Built-in runtime support is enabled for packaged builds.
         </p>
       </div>
-      <div className="status-right">
+      <div className="status-right inline-flex items-center">
         <button
-          className={`btn btn-status ${isRunning ? "is-running" : "is-stopped"}`}
+          className={`btn btn-status min-w-[136px] ${isRunning ? "is-running" : "is-stopped"}`}
           onClick={onStartStop}
         >
           {isRunning ? <Square size={12} fill="currentColor" /> : <Play size={12} fill="currentColor" />}

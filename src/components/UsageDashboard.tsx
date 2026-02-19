@@ -4,6 +4,7 @@ import type {
   UsageRange,
   UsageBreakdownRow,
 } from "../types";
+import TabHeader from "./TabHeader";
 
 interface UsageDashboardProps {
   dashboard: UsageDashboardPayload;
@@ -68,15 +69,15 @@ export default function UsageDashboard({
   );
 
   return (
-    <div className="usage-dashboard">
-      <h1 className="page-title">Usage</h1>
-      <p className="page-subtitle">
-        Track requests and token usage by provider, model, and account.
-      </p>
+    <div className="usage-dashboard flex flex-col gap-5">
+      <TabHeader
+        title="Usage"
+        subtitle="Track requests and token usage by provider, model, and account."
+      />
 
       {error ? (
-        <div className="operation-error-banner" role="alert">
-          <p className="operation-error-message">{error}</p>
+        <div className="operation-error-banner flex items-center gap-3 rounded-md border border-[color:var(--danger)]/20" role="alert">
+          <p className="operation-error-message flex-1">{error}</p>
           <button
             type="button"
             className="btn btn-sm"
@@ -88,13 +89,13 @@ export default function UsageDashboard({
       ) : null}
 
       <section className="settings-section usage-controls">
-        <div className="usage-controls-row">
-          <div className="usage-range-picker">
+        <div className="usage-controls-row flex flex-wrap items-center justify-between gap-3">
+          <div className="usage-range-picker inline-flex flex-wrap items-center gap-1.5 rounded-full border border-[color:var(--border)] bg-[color:var(--surface-soft)] p-1">
             {RANGE_OPTIONS.map((option) => (
               <button
                 type="button"
                 key={option.value}
-                className={`range-pill ${range === option.value ? "active" : ""}`}
+                className={`range-pill rounded-full px-3 py-1.5 text-xs font-semibold transition ${range === option.value ? "active" : ""}`}
                 onClick={() => onRangeChange(option.value)}
               >
                 {option.label}
@@ -103,7 +104,7 @@ export default function UsageDashboard({
           </div>
           <button
             type="button"
-            className="btn btn-sm usage-refresh-btn"
+            className="btn btn-sm usage-refresh-btn min-w-[112px]"
             onClick={onRefresh}
           >
             <RefreshCw size={14} className={isLoading ? "spin" : ""} />
@@ -112,7 +113,7 @@ export default function UsageDashboard({
         </div>
       </section>
 
-      <div className="usage-kpi-grid">
+      <div className="usage-kpi-grid grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <div className="stat-item">
           <span className="stat-label">Total Tokens</span>
           <span className="stat-value">
@@ -151,20 +152,20 @@ export default function UsageDashboard({
         </div>
       </div>
 
-      <div className="usage-grid-two">
+      <div className="usage-grid-two grid grid-cols-1 gap-4 xl:grid-cols-2">
         <section className="settings-section usage-insight-card usage-trend-card">
           <h2 className="section-title">Token Trend</h2>
           {usage.timeseries.length === 0 ? (
             <p className="empty-note">No usage events yet for this range.</p>
           ) : (
-            <div className="token-chart">
+            <div className="token-chart grid auto-cols-[minmax(24px,1fr)] grid-flow-col items-end gap-1.5 overflow-x-auto pt-2">
               {usage.timeseries.map((point) => (
                 <div
-                  className="token-bar"
+                  className="token-bar flex min-w-6 flex-col items-center gap-1.5"
                   key={`${point.bucket}-${point.total_tokens}`}
                 >
                   <div
-                    className="token-bar-fill"
+                    className="token-bar-fill w-full rounded-md bg-[color:var(--accent)] opacity-85"
                     style={{
                       height: `${Math.max(
                         6,
@@ -173,7 +174,7 @@ export default function UsageDashboard({
                     }}
                     title={`${point.bucket}: ${formatNumber(point.total_tokens)} tokens`}
                   />
-                  <span className="token-bar-label">{point.bucket}</span>
+                  <span className="token-bar-label text-[10px] text-[color:var(--text-muted)]">{point.bucket}</span>
                 </div>
               ))}
             </div>
@@ -185,10 +186,10 @@ export default function UsageDashboard({
           {providerBreakdown.length === 0 ? (
             <p className="empty-note">No provider usage yet.</p>
           ) : (
-            <div className="provider-share-list">
+            <div className="provider-share-list flex flex-col gap-2.5">
               {providerBreakdown.map((row) => (
-                <div className="provider-share-row" key={row.provider}>
-                  <div className="provider-share-label">
+                <div className="provider-share-row flex flex-col gap-1.5" key={row.provider}>
+                  <div className="provider-share-label flex items-baseline justify-between gap-2 text-sm text-[color:var(--text-secondary)]">
                     <span>{row.provider}</span>
                     <span>
                       {formatNumber(row.tokens)} tokens |{" "}
@@ -199,9 +200,9 @@ export default function UsageDashboard({
                       )}
                     </span>
                   </div>
-                  <div className="provider-share-track">
+                  <div className="provider-share-track h-1.5 w-full overflow-hidden rounded-full bg-[color:var(--track)]">
                     <div
-                      className="provider-share-fill"
+                      className="provider-share-fill h-full rounded-full bg-[color:var(--accent)]"
                       style={{
                         width: `${Math.max(
                           2,
@@ -217,12 +218,12 @@ export default function UsageDashboard({
         </section>
       </div>
 
-        <section className="settings-section usage-breakdown-section">
-          <h2 className="section-title">Detailed Breakdown</h2>
+      <section className="settings-section usage-breakdown-section">
+        <h2 className="section-title">Detailed Breakdown</h2>
         {usage.breakdown.length === 0 ? (
           <p className="empty-note">No detailed usage data available yet.</p>
         ) : (
-          <div className="usage-table-wrap">
+          <div className="usage-table-wrap overflow-auto rounded-md border border-[color:var(--border)]">
             <table className="usage-table">
               <thead>
                 <tr>

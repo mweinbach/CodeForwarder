@@ -24,6 +24,8 @@ const ANTHROPIC_VERSION: &str = "2023-06-01";
 const INTERLEAVED_THINKING_BETA: &str = "interleaved-thinking-2025-05-14";
 const HTTP_CONNECT_TIMEOUT_SECS: u64 = 5;
 const HTTP_READ_TIMEOUT_SECS: u64 = 90;
+const BACKEND_FORWARD_RETRY_ATTEMPTS: usize = 3;
+const BACKEND_FORWARD_RETRY_DELAY_MS: u64 = 200;
 
 struct ForwardOutcome {
     response: Response<Full<Bytes>>,
@@ -339,7 +341,7 @@ async fn handle_request(
     drop(vc);
 
     // 6. Default: forward to local backend on target_port
-    let result = forward_to_backend(
+    let result = forward_to_backend_with_retry(
         &method,
         &rewritten_path,
         &headers,
@@ -362,7 +364,7 @@ async fn handle_request(
                     path,
                     new_path
                 );
-                let retry_result = forward_to_backend(
+                let retry_result = forward_to_backend_with_retry(
                     &method,
                     &new_path,
                     &headers,
@@ -389,7 +391,9 @@ async fn handle_request(
                             502,
                             Bytes::new(),
                         );
-                        make_response(StatusCode::BAD_GATEWAY, "Bad Gateway")
+                        let response_message =
+                            format!("Bad Gateway - Local backend unavailable: {}", e);
+                        make_response(StatusCode::BAD_GATEWAY, &response_message)
                     }
                 });
             }
@@ -404,7 +408,62 @@ async fn handle_request(
         Err(e) => {
             log::error!("[ThinkingProxy] Backend forward error: {}", e);
             record_usage_if_needed(usage_tracker, tracking_seed, 502, Bytes::new());
-            Ok(make_response(StatusCode::BAD_GATEWAY, "Bad Gateway"))
+            let response_message = format!("Bad Gateway - Local backend unavailable: {}", e);
+            Ok(make_response(StatusCode::BAD_GATEWAY, &response_message))
+        }
+    }
+}
+
+fn is_retryable_backend_error(method: &hyper::Method, message: &str) -> bool {
+    let normalized = message.to_ascii_lowercase();
+    if normalized.contains("connection refused") {
+        return true;
+    }
+
+    let is_idempotent_method = *method == hyper::Method::GET
+        || *method == hyper::Method::HEAD
+        || *method == hyper::Method::OPTIONS
+        || *method == hyper::Method::TRACE;
+
+    is_idempotent_method
+        && (normalized.contains("connection reset")
+            || normalized.contains("broken pipe")
+            || normalized.contains("timed out")
+            || normalized.contains("timeout"))
+}
+
+async fn forward_to_backend_with_retry(
+    method: &hyper::Method,
+    path: &str,
+    headers: &hyper::HeaderMap,
+    body: &str,
+    thinking_enabled: bool,
+    target_port: u16,
+) -> Result<ForwardOutcome, Box<dyn std::error::Error + Send + Sync>> {
+    let mut attempts = 0usize;
+
+    loop {
+        attempts += 1;
+        match forward_to_backend(method, path, headers, body, thinking_enabled, target_port).await {
+            Ok(outcome) => return Ok(outcome),
+            Err(e) => {
+                if attempts >= BACKEND_FORWARD_RETRY_ATTEMPTS {
+                    return Err(e);
+                }
+
+                let message = e.to_string();
+                if !is_retryable_backend_error(method, &message) {
+                    return Err(e);
+                }
+
+                log::warn!(
+                    "[ThinkingProxy] Backend request attempt {}/{} failed: {}. Retrying...",
+                    attempts,
+                    BACKEND_FORWARD_RETRY_ATTEMPTS,
+                    message
+                );
+                tokio::time::sleep(Duration::from_millis(BACKEND_FORWARD_RETRY_DELAY_MS)).await;
+            }
         }
     }
 }
@@ -1355,6 +1414,27 @@ mod tests {
         ));
         assert!(!is_claude_model_request(r#"{"model":"gpt-4"}"#));
         assert!(!is_claude_model_request(r#"{"invalid":"json"}"#));
+    }
+
+    #[test]
+    fn test_retryable_backend_error_messages() {
+        assert!(is_retryable_backend_error(
+            &hyper::Method::POST,
+            "Connection refused"
+        ));
+        assert!(!is_retryable_backend_error(
+            &hyper::Method::POST,
+            "operation timed out"
+        ));
+        assert!(is_retryable_backend_error(
+            &hyper::Method::GET,
+            "operation timed out"
+        ));
+        assert!(is_retryable_backend_error(&hyper::Method::GET, "broken pipe"));
+        assert!(!is_retryable_backend_error(
+            &hyper::Method::POST,
+            "invalid header value"
+        ));
     }
 
     #[test]
