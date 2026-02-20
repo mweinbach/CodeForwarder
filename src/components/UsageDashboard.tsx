@@ -248,9 +248,9 @@ export default function UsageDashboard({
           {usage.breakdown.length === 0 ? (
             <div className="p-6 text-sm text-muted-foreground">No detailed usage data available yet.</div>
           ) : (
-            <div className="max-h-[400px] overflow-auto overscroll-none">
+            <div className="max-h-[400px] overflow-auto overscroll-none [&_div[data-slot=table-container]]:overflow-visible">
               <Table>
-                <TableHeader className="bg-muted/50 sticky top-0">
+                <TableHeader className="bg-muted/50 sticky top-0 z-10 shadow-sm backdrop-blur">
                   <TableRow>
                     <TableHead>Provider</TableHead>
                     <TableHead>Model</TableHead>

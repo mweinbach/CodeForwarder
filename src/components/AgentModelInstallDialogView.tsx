@@ -177,9 +177,9 @@ export function renderAgentModelInstallDialogView({
               </div>
             </div>
 
-            <div className="rounded-md border max-h-[360px] overflow-auto overscroll-none">
+            <div className="rounded-md border max-h-[360px] overflow-auto overscroll-none [&_div[data-slot=table-container]]:overflow-visible">
               <Table>
-                <TableHeader className="bg-muted/50 sticky top-0">
+                <TableHeader className="bg-muted/50 sticky top-0 z-10 shadow-sm backdrop-blur">
                   <TableRow>
                     <TableHead className="w-[44px]">Add</TableHead>
                     <TableHead>Model</TableHead>
