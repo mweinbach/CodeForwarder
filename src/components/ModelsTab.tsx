@@ -215,9 +215,9 @@ export default function ModelsTab() {
             </div>
           </div>
 
-          <div className="rounded-md border max-h-[500px] overflow-auto overscroll-none">
+          <div className="rounded-md border max-h-[500px] overflow-auto overscroll-none [&_div[data-slot=table-container]]:overflow-visible">
             <Table>
-              <TableHeader className="bg-muted/50 sticky top-0">
+              <TableHeader className="bg-muted/50 sticky top-0 z-10 shadow-sm backdrop-blur">
                 <TableRow>
                   <TableHead>Model</TableHead>
                   <TableHead>Thinking</TableHead>

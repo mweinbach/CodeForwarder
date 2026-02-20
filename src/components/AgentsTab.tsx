@@ -221,17 +221,7 @@ export default function AgentsTab() {
 
       <Card>
         <CardHeader className="pb-4">
-          <div className="flex flex-col md:flex-row md:items-end gap-4 justify-between">
-            <div className="flex flex-1 min-w-[260px] flex-col gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Search</label>
-              <Input
-                type="text"
-                value={ui.search}
-                onChange={(e) => setUi((prev) => ({ ...prev, search: e.target.value }))}
-                placeholder="Filter by name, model id, provider, base URL..."
-              />
-            </div>
-            
+          <div className="flex flex-col gap-4 md:flex-row md:items-center justify-between">
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 onClick={() => setUi((prev) => ({ ...prev, showInstallDialog: true }))}
@@ -240,17 +230,28 @@ export default function AgentsTab() {
                 <Plus className="mr-2 h-4 w-4" />
                 Add Models
               </Button>
-              <Button
-                variant="destructive"
-                onClick={() => removeModels(Array.from(ui.selectedIds))}
-                disabled={ui.isBusy || ui.selectedIds.size === 0}
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Remove Selected
-              </Button>
-              <Button variant="outline" onClick={refresh} disabled={ui.isBusy}>
-                <RefreshCw className={`mr-2 h-4 w-4 ${ui.isLoading ? "animate-spin" : ""}`} />
-                Refresh
+              {ui.selectedIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  onClick={() => removeModels(Array.from(ui.selectedIds))}
+                  disabled={ui.isBusy}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Remove Selected ({ui.selectedIds.size})
+                </Button>
+              )}
+            </div>
+
+            <div className="flex flex-1 md:flex-none items-center gap-2 w-full md:w-auto">
+              <Input
+                type="text"
+                value={ui.search}
+                onChange={(e) => setUi((prev) => ({ ...prev, search: e.target.value }))}
+                placeholder="Filter models..."
+                className="w-full md:w-[280px]"
+              />
+              <Button variant="outline" size="icon" onClick={refresh} disabled={ui.isBusy} title="Refresh">
+                <RefreshCw className={`h-4 w-4 ${ui.isLoading ? "animate-spin" : ""}`} />
               </Button>
             </div>
           </div>
@@ -271,9 +272,9 @@ export default function AgentsTab() {
             </div>
           </div>
 
-          <div className="rounded-md border max-h-[500px] overflow-auto overscroll-none mb-2">
+          <div className="rounded-md border max-h-[500px] overflow-auto overscroll-none mb-2 [&_div[data-slot=table-container]]:overflow-visible">
             <Table>
-              <TableHeader className="bg-muted/50 sticky top-0">
+              <TableHeader className="bg-muted/50 sticky top-0 z-10 shadow-sm backdrop-blur">
                 <TableRow>
                   <TableHead className="w-[44px]">
                     <Checkbox
